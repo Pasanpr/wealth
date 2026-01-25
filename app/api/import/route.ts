@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDb } from '@/lib/db'
 import {
   parseIncomeCSV,
-  parseSpendingCSV,
   parseHoldingsCSV,
   parseSecuritiesCSV,
   parseCashFlowsCSV,
@@ -38,33 +37,6 @@ export async function POST(request: NextRequest) {
 
           for (const row of result.data) {
             stmt.run(row.income_type, row.amount, row.date, row.description, row.is_recurring ? 1 : 0)
-            imported++
-          }
-        }
-        break
-      }
-
-      case 'spending': {
-        const result = parseSpendingCSV(content)
-        errors = result.errors
-
-        if (result.data.length > 0) {
-          // Get card name to ID mapping
-          const cards = db.prepare('SELECT id, name FROM credit_cards').all() as { id: number; name: string }[]
-          const cardMap = new Map(cards.map(c => [c.name.toLowerCase(), c.id]))
-
-          const stmt = db.prepare(`
-            INSERT OR REPLACE INTO credit_card_spending (credit_card_id, year, month, amount)
-            VALUES (?, ?, ?, ?)
-          `)
-
-          for (const row of result.data) {
-            const cardId = cardMap.get(row.card_name.toLowerCase())
-            if (!cardId) {
-              errors.push(`Card not found: ${row.card_name}`)
-              continue
-            }
-            stmt.run(cardId, row.year, row.month, row.amount)
             imported++
           }
         }

@@ -19,10 +19,10 @@ import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
 const importTypes = [
   {
     value: 'cashflow_spreadsheet',
-    label: 'Cash Flow Spreadsheet',
-    description: 'Import your full financial planning spreadsheet with credit card payments sections',
-    format: 'Sections like "Credit Card Payments: 2024" with monthly columns',
-    example: 'Your existing spreadsheet format with Sapphire Balance, Freedom Balance, Checking, etc.',
+    label: 'Credit Card Balances (Spreadsheet)',
+    description: 'Import credit card balances from a spreadsheet with monthly columns',
+    format: 'Sections like "Sheet 1: 2024" with monthly columns (January 2024, February 2024, etc.)',
+    example: 'Rows: Sapphire Balance, Freedom Balance, Apple Card, Gap Visa with monthly values',
     isSpecial: true,
   },
   {
@@ -31,13 +31,6 @@ const importTypes = [
     description: 'Import salary, RSU vesting, bonuses',
     format: 'date,income_type,amount,description,is_recurring',
     example: '2024-01-15,salary,8500.00,Monthly salary,true',
-  },
-  {
-    value: 'spending',
-    label: 'Credit Card Spending',
-    description: 'Import monthly spending by card',
-    format: 'card_name,year,month,amount',
-    example: 'Chase Sapphire,2024,1,2500.00',
   },
   {
     value: 'holdings',
@@ -75,7 +68,6 @@ interface ImportResult {
   details?: {
     months?: number
     cardBalances?: number
-    snapshots?: number
     cardsCreated?: number
   }
   cardsCreated?: string[]
@@ -232,9 +224,6 @@ export default function ImportPage() {
                     {result.details.cardBalances !== undefined && (
                       <p>{result.details.cardBalances} card balance records</p>
                     )}
-                    {result.details.snapshots !== undefined && (
-                      <p>{result.details.snapshots} monthly snapshots</p>
-                    )}
                     {result.details.cardsCreated !== undefined && result.details.cardsCreated > 0 && (
                       <p>{result.details.cardsCreated} new cards created</p>
                     )}
@@ -302,12 +291,6 @@ export default function ImportPage() {
                   </div>
                 )}
 
-                {selectedType === 'spending' && (
-                  <div className="text-sm text-muted-foreground">
-                    <strong>card_name</strong> must match an existing credit card name exactly
-                  </div>
-                )}
-
                 {selectedType === 'holdings' && (
                   <div className="text-sm text-muted-foreground">
                     <strong>account_name</strong> and <strong>symbol</strong> must match existing accounts and securities
@@ -322,15 +305,13 @@ export default function ImportPage() {
 
                 {selectedType === 'cashflow_spreadsheet' && (
                   <div className="text-sm text-muted-foreground space-y-2">
-                    <p>This import reads your full financial spreadsheet and extracts:</p>
+                    <p>This import auto-detects credit card rows by looking for:</p>
                     <ul className="list-disc list-inside space-y-1">
-                      <li>Credit card balances (Sapphire, Freedom, Apple Card, Gap Visa)</li>
-                      <li>Checking account balance</li>
-                      <li>Transfers</li>
-                      <li>Checking desired end balance</li>
-                      <li>Checking and savings payments</li>
+                      <li>Rows containing &quot;Balance&quot; (e.g., Sapphire Balance)</li>
+                      <li>Rows containing &quot;Card&quot; (e.g., Apple Card)</li>
+                      <li>Rows containing card brands (Visa, Mastercard, Amex, etc.)</li>
                     </ul>
-                    <p className="mt-2">The importer looks for sections titled &quot;Credit Card Payments: YYYY&quot; with monthly columns.</p>
+                    <p className="mt-2">The importer looks for sections titled &quot;Sheet 1: YYYY&quot; with monthly columns (January 2024, February 2024, etc.).</p>
                     <p>Credit cards will be created automatically if they don&apos;t exist.</p>
                   </div>
                 )}

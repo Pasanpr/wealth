@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     if (parsed.months.length === 0) {
       return NextResponse.json({
-        error: 'No cash flow data found in CSV'
+        error: 'No credit card data found in CSV'
       }, { status: 400 })
     }
 
@@ -38,21 +38,6 @@ export async function POST(request: NextRequest) {
     const cardNameToId: Record<string, number> = {}
     for (const card of existingCards) {
       cardNameToId[card.name.toLowerCase()] = card.id
-      // Also map common variations
-      if (card.name.toLowerCase().includes('sapphire')) {
-        cardNameToId['sapphire'] = card.id
-      }
-      if (card.name.toLowerCase().includes('freedom')) {
-        cardNameToId['freedom'] = card.id
-      }
-      if (card.name.toLowerCase().includes('apple')) {
-        cardNameToId['apple card'] = card.id
-        cardNameToId['apple'] = card.id
-      }
-      if (card.name.toLowerCase().includes('gap')) {
-        cardNameToId['gap visa'] = card.id
-        cardNameToId['gap'] = card.id
-      }
     }
 
     // Track cards that need to be created
@@ -71,13 +56,13 @@ export async function POST(request: NextRequest) {
       cardNameToId[cardName.toLowerCase()] = result.lastInsertRowid as number
     }
 
-    // Import the data
+    // Import the credit card balances
     let importedMonths = 0
     let importedCardBalances = 0
-    let importedSnapshots = 0
 
     for (const month of parsed.months) {
-      // Import card balances
+      let monthHadData = false
+
       for (const cardBalance of month.cardBalances) {
         const cardId = cardNameToId[cardBalance.cardName.toLowerCase()]
         if (!cardId) {
@@ -104,45 +89,12 @@ export async function POST(request: NextRequest) {
           `).run(cardId, month.year, month.month, cardBalance.balance)
         }
         importedCardBalances++
+        monthHadData = true
       }
 
-      // Import monthly snapshot
-      const existingSnapshot = db.prepare(`
-        SELECT id FROM monthly_snapshots WHERE year = ? AND month = ?
-      `).get(month.year, month.month)
-
-      if (existingSnapshot) {
-        db.prepare(`
-          UPDATE monthly_snapshots
-          SET checking_balance = ?, transfers = ?, checking_desired_end = ?,
-              checking_payment = ?, savings_payment = ?, updated_at = datetime('now')
-          WHERE year = ? AND month = ?
-        `).run(
-          month.checking,
-          month.transfers,
-          month.checkingDesiredEnd,
-          month.checkingPayment,
-          month.savingsPayment,
-          month.year,
-          month.month
-        )
-      } else {
-        db.prepare(`
-          INSERT INTO monthly_snapshots (year, month, checking_balance, transfers, checking_desired_end, checking_payment, savings_payment)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          month.year,
-          month.month,
-          month.checking,
-          month.transfers,
-          month.checkingDesiredEnd,
-          month.checkingPayment,
-          month.savingsPayment
-        )
+      if (monthHadData) {
+        importedMonths++
       }
-      importedSnapshots++
-
-      importedMonths++
     }
 
     return NextResponse.json({
@@ -150,15 +102,14 @@ export async function POST(request: NextRequest) {
       imported: {
         months: importedMonths,
         cardBalances: importedCardBalances,
-        snapshots: importedSnapshots,
         cardsCreated: missingCards.length
       },
       cardsCreated: missingCards
     })
   } catch (error) {
-    console.error('Failed to import cash flow data:', error)
+    console.error('Failed to import credit card data:', error)
     return NextResponse.json({
-      error: 'Failed to import cash flow data',
+      error: 'Failed to import credit card data',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }

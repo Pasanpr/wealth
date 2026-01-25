@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { ImportDropzone } from '@/components/pay-statements/import-dropzone'
 import { ImportPreview } from '@/components/pay-statements/import-preview'
 import { ParsedPayStatement } from '@/lib/types'
-import { AlertCircle, CheckCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle, Loader2, Clock } from 'lucide-react'
 
 interface PreviewItem {
   filename: string
@@ -25,10 +25,18 @@ interface ImportResult {
   isDuplicate?: boolean
 }
 
+type FileStatus = 'pending' | 'processing' | 'success' | 'error'
+
+interface FileProgress {
+  filename: string
+  status: FileStatus
+  error?: string
+}
+
 interface ParsingProgress {
   total: number
   completed: number
-  currentFile: string
+  files: FileProgress[]
   successes: PreviewItem[]
   failures: ImportResult[]
 }
@@ -42,7 +50,7 @@ export default function ImportPayStatementsPage() {
   const [parsingProgress, setParsingProgress] = useState<ParsingProgress>({
     total: 0,
     completed: 0,
-    currentFile: '',
+    files: [],
     successes: [],
     failures: [],
   })
@@ -51,19 +59,35 @@ export default function ImportPayStatementsPage() {
     setError(null)
     setStep('parsing')
 
+    const BATCH_SIZE = 3 // Process 3 files concurrently
+
+    // Initialize progress with all files as pending
+    const initialFiles: FileProgress[] = files.map(f => ({
+      filename: f.name,
+      status: 'pending' as FileStatus,
+    }))
+
     const progress: ParsingProgress = {
       total: files.length,
       completed: 0,
-      currentFile: '',
+      files: initialFiles,
       successes: [],
       failures: [],
     }
-    setParsingProgress(progress)
+    setParsingProgress({ ...progress })
 
-    // Process files one at a time for real-time progress
-    for (const file of files) {
-      progress.currentFile = file.name
-      setParsingProgress({ ...progress })
+    // Helper to update a file's status
+    const updateFileStatus = (filename: string, status: FileStatus, error?: string) => {
+      const fileIndex = progress.files.findIndex(f => f.filename === filename)
+      if (fileIndex !== -1) {
+        progress.files[fileIndex] = { filename, status, error }
+        setParsingProgress({ ...progress })
+      }
+    }
+
+    // Process a single file
+    const processFile = async (file: File): Promise<void> => {
+      updateFileStatus(file.name, 'processing')
 
       try {
         const formData = new FormData()
@@ -83,6 +107,7 @@ export default function ImportPayStatementsPage() {
             success: false,
             error: data.error || 'Failed to parse',
           })
+          updateFileStatus(file.name, 'error', data.error || 'Failed to parse')
         } else {
           // Add successful parses
           const validItems = data.statements || []
@@ -90,17 +115,27 @@ export default function ImportPayStatementsPage() {
 
           progress.successes.push(...validItems)
           progress.failures.push(...errors)
+          updateFileStatus(file.name, validItems.length > 0 ? 'success' : 'error',
+            errors.length > 0 ? errors[0].error : undefined)
         }
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
         progress.failures.push({
           filename: file.name,
           success: false,
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: errorMsg,
         })
+        updateFileStatus(file.name, 'error', errorMsg)
       }
 
       progress.completed++
       setParsingProgress({ ...progress })
+    }
+
+    // Process files in parallel batches
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE)
+      await Promise.all(batch.map(processFile))
     }
 
     // Done processing all files
@@ -203,49 +238,70 @@ export default function ImportPayStatementsPage() {
 
       {step === 'parsing' && (
         <Card>
-          <CardContent className="p-8">
-            <div className="space-y-6">
+          <CardContent className="p-6">
+            <div className="space-y-4">
               {/* Progress header */}
-              <div className="text-center">
-                <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-                <p className="text-lg font-medium">
-                  Parsing PDFs ({parsingProgress.completed}/{parsingProgress.total})
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Using AI to extract pay statement data
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-lg font-medium">
+                    Parsing PDFs ({parsingProgress.completed}/{parsingProgress.total})
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Using AI to extract pay statement data
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span>{parsingProgress.successes.length}</span>
+                  </div>
+                  {parsingProgress.failures.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <span>{parsingProgress.failures.length}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Progress bar */}
-              <div className="w-full bg-muted rounded-full h-2">
+              <div className="w-full bg-muted rounded-full h-1.5">
                 <div
-                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  className="bg-primary h-1.5 rounded-full transition-all duration-300"
                   style={{ width: `${(parsingProgress.completed / parsingProgress.total) * 100}%` }}
                 />
               </div>
 
-              {/* Current file */}
-              {parsingProgress.currentFile && (
-                <p className="text-sm text-center text-muted-foreground">
-                  Processing: <span className="font-medium text-foreground">{parsingProgress.currentFile}</span>
-                </p>
-              )}
-
-              {/* Results so far */}
-              {(parsingProgress.successes.length > 0 || parsingProgress.failures.length > 0) && (
-                <div className="flex justify-center gap-6 text-sm">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span>{parsingProgress.successes.length} parsed</span>
-                  </div>
-                  {parsingProgress.failures.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-destructive" />
-                      <span>{parsingProgress.failures.length} failed</span>
+              {/* File list with individual statuses */}
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {parsingProgress.files.map((file) => (
+                  <div
+                    key={file.filename}
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-sm ${
+                      file.status === 'processing' ? 'bg-primary/10' :
+                      file.status === 'success' ? 'bg-green-500/10' :
+                      file.status === 'error' ? 'bg-destructive/10' :
+                      'bg-muted/50'
+                    }`}
+                  >
+                    <span className="truncate flex-1 mr-3">{file.filename}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {file.status === 'pending' && (
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      {file.status === 'processing' && (
+                        <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                      )}
+                      {file.status === 'success' && (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      )}
+                      {file.status === 'error' && (
+                        <AlertCircle className="h-4 w-4 text-destructive" />
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>

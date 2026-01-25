@@ -149,7 +149,7 @@ CATEGORIES:
 - pretax_deduction: 401k, Medical/Dental/Vision Pre-Tax, FSA
 - posttax_deduction: MetLife Legal, other post-tax items (NOT RSU on RSU vesting stubs - see below)
 - employer_benefit: Employer Medical/Dental/Vision, Group Term Life, 401K Match
-- adjustment: Expense Reimbursements, Travel Reimbursements, Mileage, or any "Imputed" adjustments that ADD to net pay
+- adjustment: Expense Reimbursements, Travel Reimbursements, Mileage, or any "Imputed" adjustments that ADD to net pay. DO NOT include "PTO Available", "Sick Available", "Vacation Available" or similar balance/hours information - these are informational only and do not affect pay
 - rsu_withholding: The "RSU" line on RSU vesting stubs (shares withheld for taxes)
 
 ITEM CODES (use these standard codes):
@@ -169,6 +169,7 @@ On ADP pay stubs, expense reimbursements appear in different places:
 - These amounts ADD to net pay (not subtracted like deductions)
 - If you see Net Pay that doesn't match gross - taxes - deductions, look for reimbursements!
 - Reimbursements explain the difference: NetPay = Gross - Taxes - Deductions + Adjustments
+- DO NOT INCLUDE as adjustments: "PTO Available", "Sick Available", "Vacation Balance", "Hours Available" - these are informational balance displays, not pay items. Skip them entirely.
 
 CRITICAL - RSU VESTING STUB HANDLING:
 On RSU vesting stubs, the "RSU" line in deductions is SPECIAL:
@@ -476,25 +477,53 @@ export async function parsePayStatementPdfWithLlm(
 
     // Filter out rsu_withholding - it's informational only and doesn't have a DB category
     // RSU_WITHHOLDING represents shares withheld for taxes, which are already counted in statutory_tax
-    const parsedItems = itemsToProcess.filter(i => i.categoryCode !== 'rsu_withholding')
+    let parsedItems = itemsToProcess.filter(i => i.categoryCode !== 'rsu_withholding')
 
-    // Calculate totals from line items (don't trust LLM's summary numbers)
-    const grossEarnings = parsedItems
+    // Post-process: Recategorize misclassified expense reimbursements
+    // Sometimes the LLM puts expense reimbursements in deductions instead of adjustments
+    // Reimbursements have positive amounts and ADD to net pay, so they should be adjustments
+    const reimbursementKeywords = ['reimb', 'expense', 'travel', 'mileage', 'imputed']
+    parsedItems = parsedItems.map(item => {
+      // Check if this looks like a reimbursement that was miscategorized as a deduction
+      const isDeduction = item.categoryCode === 'pretax_deduction' || item.categoryCode === 'posttax_deduction'
+      const lowerName = item.itemName.toLowerCase()
+      const lowerCode = item.itemCode.toLowerCase()
+      const looksLikeReimbursement = reimbursementKeywords.some(
+        kw => lowerName.includes(kw) || lowerCode.includes(kw)
+      )
+
+      if (isDeduction && looksLikeReimbursement && item.currentAmount > 0) {
+        if (debug) {
+          console.log(`Recategorizing "${item.itemName}" from ${item.categoryCode} to adjustment`)
+        }
+        return { ...item, categoryCode: 'adjustment' as PayItemCategoryCode }
+      }
+      return item
+    })
+
+    // Calculate totals from line items when available
+    const calcGrossEarnings = parsedItems
       .filter(i => i.categoryCode === 'earnings')
       .reduce((sum, i) => sum + i.currentAmount, 0)
 
-    const totalTaxes = parsedItems
+    const calcTotalTaxes = parsedItems
       .filter(i => i.categoryCode === 'statutory_tax')
       .reduce((sum, i) => sum + i.currentAmount, 0)
 
-    // Exclude rsu_withholding from deductions (already filtered above, but being explicit)
-    const totalDeductions = parsedItems
+    const calcTotalDeductions = parsedItems
       .filter(i => i.categoryCode === 'pretax_deduction' || i.categoryCode === 'posttax_deduction')
       .reduce((sum, i) => sum + i.currentAmount, 0)
 
-    const employerBenefits = parsedItems
+    const calcEmployerBenefits = parsedItems
       .filter(i => i.categoryCode === 'employer_benefit')
       .reduce((sum, i) => sum + i.currentAmount, 0)
+
+    // Use calculated totals if items were parsed successfully, otherwise fall back to LLM's extracted totals
+    const itemsParsedSuccessfully = parsedItems.length > 0
+    const grossEarnings = itemsParsedSuccessfully ? calcGrossEarnings : (rawExtracted.grossEarnings || 0)
+    const totalTaxes = itemsParsedSuccessfully ? calcTotalTaxes : (rawExtracted.totalTaxes || 0)
+    const totalDeductions = itemsParsedSuccessfully ? calcTotalDeductions : (rawExtracted.totalDeductions || 0)
+    const employerBenefits = itemsParsedSuccessfully ? calcEmployerBenefits : (rawExtracted.employerBenefits || 0)
 
     // Map to ParsedPayStatement
     const statement: ParsedPayStatement = {
@@ -517,7 +546,10 @@ export async function parsePayStatementPdfWithLlm(
         })),
     }
 
-    return { success: true, data: statement, fileHash }
+    // Include raw LLM output for debugging
+    const rawText = JSON.stringify(rawExtracted, null, 2)
+
+    return { success: true, data: statement, fileHash, rawText }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error parsing PDF'
     return { success: false, error: message, fileHash }

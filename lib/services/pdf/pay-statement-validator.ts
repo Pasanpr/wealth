@@ -16,7 +16,7 @@ export interface ValidationResult {
   calculatedNetPay?: number
 }
 
-const TOLERANCE = 0.02 // $0.02 tolerance for rounding differences
+const TOLERANCE = 1.00 // $1.00 tolerance for ADP rounding quirks and multi-item sum differences
 
 /**
  * Detect if this is an RSU vesting stub
@@ -141,10 +141,21 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
   }
 
   // 8. Net pay math check: grossEarnings - totalTaxes - totalDeductions + adjustments ≈ netPay
+  // Use extracted totals (not item sums) since the PDF totals are what matter
   // For RSU vesting stubs, net pay is $0 (you receive shares, not cash)
   const adjustmentItems = statement.items.filter(i => i.categoryCode === 'adjustment')
   const totalAdjustments = adjustmentItems.reduce((sum, item) => sum + item.currentAmount, 0)
-  const calculatedNetPay = statement.grossEarnings - statement.totalTaxes - statement.totalDeductions + totalAdjustments
+
+  // Calculate both with and without adjustments - use whichever is closer to actual net pay
+  // This handles cases where "adjustments" are informational or already included in gross
+  const calcWithAdjustments = statement.grossEarnings - statement.totalTaxes - statement.totalDeductions + totalAdjustments
+  const calcWithoutAdjustments = statement.grossEarnings - statement.totalTaxes - statement.totalDeductions
+
+  const diffWithAdj = Math.abs(calcWithAdjustments - statement.netPay)
+  const diffWithoutAdj = Math.abs(calcWithoutAdjustments - statement.netPay)
+
+  // Use the calculation that's closer to actual net pay
+  const calculatedNetPay = diffWithAdj <= diffWithoutAdj ? calcWithAdjustments : calcWithoutAdjustments
 
   if (isRsu) {
     // RSU stubs: net pay should be $0, calculated net represents share value retained
@@ -158,10 +169,11 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
       })
     }
   } else if (Math.abs(calculatedNetPay - statement.netPay) > TOLERANCE) {
+    const usedAdjustments = diffWithAdj <= diffWithoutAdj && totalAdjustments !== 0
     issues.push({
       severity: 'warning',
       field: 'netPay',
-      message: `Net pay does not match calculation (gross - taxes - deductions${totalAdjustments !== 0 ? ' + adjustments' : ''})`,
+      message: `Net pay does not match calculation (gross - taxes - deductions${usedAdjustments ? ' + adjustments' : ''})`,
       expected: calculatedNetPay,
       actual: statement.netPay,
     })

@@ -42,9 +42,9 @@ const SECTIONS: Record<ResetSection, SectionInfo> = {
     description: 'Credit cards and spending history',
   },
   cash: {
-    name: 'Cash Balances',
-    tables: ['cash_balances'],
-    description: 'Cash balance snapshots',
+    name: 'Cash Accounts & Balances',
+    tables: ['monthly_cash_balances', 'cash_accounts', 'cash_balances'],
+    description: 'Cash accounts and monthly balance history',
   },
   expenses: {
     name: 'Expenses',

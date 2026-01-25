@@ -4,14 +4,13 @@ import { useEffect, useState } from 'react'
 import { PageContainer } from '@/components/layout'
 import { Card, CardContent, CardHeader, CardTitle, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils/format'
-import { CreditCard, FixedExpense, MonthlyCashFlow } from '@/lib/types'
+import { CreditCard, MonthlyCashFlow } from '@/lib/types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 interface CashFlowData {
   year: number
   cards: CreditCard[]
-  fixedExpenses: FixedExpense[]
   months: MonthlyCashFlow[]
 }
 
@@ -44,15 +43,10 @@ export default function CashFlowGridPage() {
     years.push(y)
   }
 
-  // Check if a month has any data
-  const hasData = (month: MonthlyCashFlow) => {
-    return month.totalCredit > 0 || month.checkingBalance > 0
-  }
-
   return (
     <PageContainer
-      title="Cash Flow"
-      description="Monthly cash flow tracking - credit cards, checking, and payments"
+      title="Credit Card Spending"
+      description="Monthly credit card balances by card"
     >
       <div className="flex items-center gap-4 mb-6">
         <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -114,110 +108,15 @@ export default function CashFlowGridPage() {
                   ))}
 
                   {/* Spacer row */}
-                  <tr className="h-4"></tr>
+                  <tr className="h-2"></tr>
 
-                  {/* Checking */}
-                  <tr className="border-b bg-muted">
-                    <td className={`p-2 font-medium ${stickyCellClass}`}>Checking</td>
-                    {data.months.map((month, idx) => (
-                      <td key={idx} className="p-2 text-right">
-                        {month.checkingBalance > 0
-                          ? formatCurrency(month.checkingBalance)
-                          : <span className="text-muted-foreground">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* Transfers */}
-                  <tr className="border-b">
-                    <td className={`p-2 font-medium ${stickyCellClass}`}>Transfers</td>
-                    {data.months.map((month, idx) => (
-                      <td key={idx} className="p-2 text-right">
-                        {month.transfers > 0
-                          ? formatCurrency(month.transfers)
-                          : <span className="text-muted-foreground">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* Spacer row */}
-                  <tr className="h-4"></tr>
-
-                  {/* Fixed Expenses */}
-                  {data.fixedExpenses.map(expense => (
-                    <tr key={expense.id} className="border-b">
-                      <td className={`p-2 font-medium ${stickyCellClass}`}>{expense.name}</td>
-                      {data.months.map((month, idx) => (
-                        <td key={idx} className="p-2 text-right">
-                          {expense.amount > 0
-                            ? formatCurrency(expense.amount)
-                            : <span className="text-muted-foreground">-</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-
-                  {/* Checking Desired End */}
-                  <tr className="border-b">
-                    <td className={`p-2 font-medium ${stickyCellClass}`}>Checking Desired End</td>
-                    {data.months.map((month, idx) => (
-                      <td key={idx} className="p-2 text-right">
-                        {month.checkingDesiredEnd > 0
-                          ? formatCurrency(month.checkingDesiredEnd)
-                          : <span className="text-muted-foreground">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* Available Checking (calculated) */}
-                  <tr className="border-b bg-muted">
-                    <td className={`p-2 font-medium ${stickyCellClass}`}>Available Checking</td>
-                    {data.months.map((month, idx) => (
-                      <td key={idx} className={`p-2 text-right font-medium ${month.availableChecking < 0 ? 'text-red-600' : ''}`}>
-                        {hasData(month)
-                          ? formatCurrency(month.availableChecking)
-                          : <span className="text-muted-foreground">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* Spacer row */}
-                  <tr className="h-4"></tr>
-
-                  {/* Total Credit */}
-                  <tr className="border-b bg-primary/5">
-                    <td className={`p-2 font-bold ${stickyCellClass}`}>{selectedYear} Credit</td>
+                  {/* Total */}
+                  <tr className="border-t-2 bg-muted">
+                    <td className={`p-2 font-bold ${stickyCellClass}`}>Total</td>
                     {data.months.map((month, idx) => (
                       <td key={idx} className="p-2 text-right font-bold">
                         {month.totalCredit > 0
                           ? formatCurrency(month.totalCredit)
-                          : <span className="text-muted-foreground">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* Spacer row */}
-                  <tr className="h-4"></tr>
-
-                  {/* Checking Payment */}
-                  <tr className="border-b">
-                    <td className={`p-2 font-medium ${stickyCellClass}`}>Checking Payment</td>
-                    {data.months.map((month, idx) => (
-                      <td key={idx} className="p-2 text-right">
-                        {month.checkingPayment > 0
-                          ? formatCurrency(month.checkingPayment)
-                          : <span className="text-muted-foreground">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* Savings Payment */}
-                  <tr className="border-b">
-                    <td className={`p-2 font-medium ${stickyCellClass}`}>Savings Payment</td>
-                    {data.months.map((month, idx) => (
-                      <td key={idx} className="p-2 text-right">
-                        {month.savingsPayment > 0
-                          ? formatCurrency(month.savingsPayment)
                           : <span className="text-muted-foreground">-</span>}
                       </td>
                     ))}

@@ -115,7 +115,7 @@ export interface YearlyExpense {
   updated_at: string
 }
 
-// Cash Balances
+// Cash Balances (legacy - individual snapshots)
 export interface CashBalance {
   id: number
   date: string
@@ -123,6 +123,31 @@ export interface CashBalance {
   account_name: string
   notes: string | null
   created_at: string
+}
+
+// Cash Accounts
+export type CashAccountType = 'checking' | 'savings' | 'money_market' | 'other'
+
+export interface CashAccount {
+  id: number
+  name: string
+  account_type: CashAccountType
+  institution: string | null
+  is_active: boolean
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+// Monthly Cash Balances
+export interface MonthlyCashBalance {
+  id: number
+  cash_account_id: number
+  year: number
+  month: number
+  balance: number
+  created_at: string
+  updated_at: string
 }
 
 // Credit Card Spending

@@ -116,7 +116,7 @@ export default function Dashboard() {
           value={loading ? '--' : formatCurrency(data?.spending.currentMonth || 0)}
           description={loading ? 'Loading...' : `Avg: ${formatCurrency(data?.spending.monthlyAverage || 0)}`}
           icon={CreditCard}
-          href="/spending"
+          href="/cashflow"
         />
         <SummaryCard
           title="Net Worth"
@@ -142,7 +142,7 @@ export default function Dashboard() {
           <CardContent>
             <div className="grid gap-2">
               <Link
-                href="/spending/entry"
+                href="/cashflow/entry"
                 className="flex items-center rounded-lg border border-purple-500/40 dark:border-purple-500/30 bg-gradient-to-r from-purple-500/20 to-pink-500/20 dark:from-purple-500/10 dark:to-pink-500/10 p-3 hover:from-purple-500/30 hover:to-pink-500/30 dark:hover:from-purple-500/20 dark:hover:to-pink-500/20 transition-all hover:scale-[1.02]"
               >
                 <CreditCard className="mr-3 h-4 w-4 text-purple-600 dark:text-purple-300" />
@@ -197,7 +197,7 @@ export default function Dashboard() {
                   </Link> (brokerage, IRA, 401k)
                 </li>
                 <li>
-                  <Link href="/spending/cards" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
+                  <Link href="/cashflow/cards" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
                     Add credit cards
                   </Link> to track spending
                 </li>

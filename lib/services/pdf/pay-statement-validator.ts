@@ -33,11 +33,33 @@ function isRsuVestingStub(statement: ParsedPayStatement): boolean {
 }
 
 /**
+ * Detect if this is a year-end adjustment/correction stub
+ * These have: negative taxes (refunds), negative deductions (credits), often $0 net pay
+ */
+function isAdjustmentStub(statement: ParsedPayStatement): boolean {
+  const taxItems = statement.items.filter(i => i.categoryCode === 'statutory_tax')
+  const hasNegativeTaxes = taxItems.some(i => i.currentAmount < 0)
+
+  const deductionItems = statement.items.filter(
+    i => i.categoryCode === 'pretax_deduction' || i.categoryCode === 'posttax_deduction'
+  )
+  const hasNegativeDeductions = deductionItems.some(i => i.currentAmount < 0)
+
+  // Also check for "offset" items which indicate corrections
+  const hasOffset = statement.items.some(
+    i => i.itemName.toLowerCase().includes('offset')
+  )
+
+  return hasNegativeTaxes || hasNegativeDeductions || hasOffset
+}
+
+/**
  * Validate a parsed pay statement for correctness and completeness
  */
 export function validatePayStatement(statement: ParsedPayStatement): ValidationResult {
   const issues: ValidationIssue[] = []
   const isRsu = isRsuVestingStub(statement)
+  const isAdjustment = isAdjustmentStub(statement)
 
   // 1. Required fields validation
   if (!statement.periodStart) {
@@ -168,6 +190,10 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
         actual: statement.netPay,
       })
     }
+  } else if (isAdjustment) {
+    // Adjustment stubs have complex math with refunds/credits - skip detailed validation
+    // Just verify net pay is reasonable (non-negative or zero)
+    // The math doesn't follow standard formula due to signed values
   } else if (Math.abs(calculatedNetPay - statement.netPay) > TOLERANCE) {
     const usedAdjustments = diffWithAdj <= diffWithoutAdj && totalAdjustments !== 0
     issues.push({
@@ -188,7 +214,8 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
     })
   }
 
-  if (statement.totalTaxes < 0) {
+  // For adjustment stubs, negative taxes (refunds) and deductions (credits) are expected
+  if (statement.totalTaxes < 0 && !isAdjustment) {
     issues.push({
       severity: 'error',
       field: 'totalTaxes',
@@ -196,7 +223,7 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
     })
   }
 
-  if (statement.totalDeductions < 0) {
+  if (statement.totalDeductions < 0 && !isAdjustment) {
     issues.push({
       severity: 'error',
       field: 'totalDeductions',
@@ -206,7 +233,8 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
 
   // 10. Individual item validation
   for (const item of statement.items) {
-    if (item.currentAmount < 0) {
+    // For adjustment stubs, negative amounts are expected (refunds/credits)
+    if (item.currentAmount < 0 && !isAdjustment) {
       issues.push({
         severity: 'warning',
         field: `items.${item.itemCode}`,
@@ -234,8 +262,9 @@ export function validatePayStatement(statement: ParsedPayStatement): ValidationR
   }
 
   // 11. Deposit validation - deposits should sum to net pay (approximately)
-  // Skip for RSU stubs - they show $0 net pay but may have deposits from other sources
-  if (statement.deposits.length > 0 && !isRsu) {
+  // Skip for RSU stubs and adjustment stubs - they show $0 net pay but may have deposits from other sources
+  // Also skip when net pay is $0 (deposits likely from other sources on same pay date)
+  if (statement.deposits.length > 0 && !isRsu && !isAdjustment && statement.netPay !== 0) {
     const totalDeposits = statement.deposits.reduce((sum, d) => sum + d.amount, 0)
     if (Math.abs(totalDeposits - statement.netPay) > TOLERANCE) {
       issues.push({

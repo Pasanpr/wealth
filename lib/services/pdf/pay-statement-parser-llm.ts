@@ -482,7 +482,7 @@ export async function parsePayStatementPdfWithLlm(
     // Post-process: Recategorize misclassified expense reimbursements
     // Sometimes the LLM puts expense reimbursements in deductions instead of adjustments
     // Reimbursements have positive amounts and ADD to net pay, so they should be adjustments
-    const reimbursementKeywords = ['reimb', 'expense', 'travel', 'mileage', 'imputed']
+    const reimbursementKeywords = ['reimb', 'expense', 'travel', 'mileage', 'imputed', 'offset']
     parsedItems = parsedItems.map(item => {
       // Check if this looks like a reimbursement that was miscategorized as a deduction
       const isDeduction = item.categoryCode === 'pretax_deduction' || item.categoryCode === 'posttax_deduction'

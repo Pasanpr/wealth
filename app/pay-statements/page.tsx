@@ -19,7 +19,13 @@ import { PaySummary } from '@/components/pay-statements/pay-summary'
 import { StatementList } from '@/components/pay-statements/statement-list'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { PayStatement, YtdPaySummary } from '@/lib/types'
-import { Upload, FileText, History } from 'lucide-react'
+import { Upload, FileText, History, Info } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export default function PayStatementsPage() {
   const [statements, setStatements] = useState<PayStatement[]>([])
@@ -147,51 +153,104 @@ export default function PayStatementsPage() {
           )}
 
           {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Effective Tax Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {ytdSummary && ytdSummary.grossEarnings > 0
-                    ? `${((ytdSummary.totalTaxes / ytdSummary.grossEarnings) * 100).toFixed(1)}%`
-                    : '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Savings Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {ytdSummary && ytdSummary.grossEarnings > 0
-                    ? `${((ytdSummary.totalDeductions / ytdSummary.grossEarnings) * 100).toFixed(1)}%`
-                    : '-'}
-                </p>
-                <p className="text-xs text-muted-foreground">Pre-tax + Post-tax deductions</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Take-Home Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {ytdSummary && ytdSummary.grossEarnings > 0
-                    ? `${((ytdSummary.netPay / ytdSummary.grossEarnings) * 100).toFixed(1)}%`
-                    : '-'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <TooltipProvider delayDuration={300}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6">
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Effective Tax Rate
+                    </CardTitle>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground transition-colors">
+                          <Info className="h-3.5 w-3.5" />
+                          <span className="sr-only">Info about Effective Tax Rate</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-left">
+                        <p>
+                          The percentage of your gross earnings paid in taxes. Calculated as Total
+                          Taxes / Gross Earnings. This represents your actual tax burden after all
+                          withholdings.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {ytdSummary && ytdSummary.grossEarnings > 0
+                      ? `${((ytdSummary.totalTaxes / ytdSummary.grossEarnings) * 100).toFixed(1)}%`
+                      : '-'}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Savings Rate
+                    </CardTitle>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground transition-colors">
+                          <Info className="h-3.5 w-3.5" />
+                          <span className="sr-only">Info about Savings Rate</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-left">
+                        <p>
+                          The percentage of your gross earnings going to savings and benefits.
+                          Includes 401(k) contributions, health insurance, FSA, and other
+                          deductions. Higher is generally better for long-term wealth building.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {ytdSummary && ytdSummary.grossEarnings > 0
+                      ? `${((ytdSummary.totalDeductions / ytdSummary.grossEarnings) * 100).toFixed(1)}%`
+                      : '-'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Pre-tax + Post-tax deductions</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Take-Home Rate
+                    </CardTitle>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="text-muted-foreground hover:text-foreground transition-colors">
+                          <Info className="h-3.5 w-3.5" />
+                          <span className="sr-only">Info about Take-Home Rate</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-left">
+                        <p>
+                          The percentage of your gross earnings you actually receive in your bank
+                          account. Calculated as Net Pay / Gross Earnings. The remaining portion
+                          goes to taxes and deductions.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">
+                    {ytdSummary && ytdSummary.grossEarnings > 0
+                      ? `${((ytdSummary.netPay / ytdSummary.grossEarnings) * 100).toFixed(1)}%`
+                      : '-'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </TooltipProvider>
 
           {/* Recent Statements */}
           <Card>

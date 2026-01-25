@@ -23,7 +23,7 @@ import {
 } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils/format'
 import { CashAccount } from '@/lib/types'
-import { Plus, Save, Star } from 'lucide-react'
+import { Plus, Save, Star, X } from 'lucide-react'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -165,6 +165,20 @@ export default function CashBalancesPage() {
     }
   }
 
+  const handleDeleteAccount = async (accountId: number, accountName: string) => {
+    if (!confirm(`Delete "${accountName}"? This will also remove all balance data for this account.`)) {
+      return
+    }
+    try {
+      await fetch(`/api/cash-accounts/${accountId}`, {
+        method: 'DELETE',
+      })
+      fetchData()
+    } catch (error) {
+      console.error('Failed to delete account:', error)
+    }
+  }
+
   const years = []
   const currentYear = new Date().getFullYear()
   for (let y = currentYear + 1; y >= currentYear - 5; y--) {
@@ -241,6 +255,13 @@ export default function CashBalancesPage() {
                         <Star className="h-3.5 w-3.5" />
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDeleteAccount(account.id, account.name)}
+                      className="text-muted-foreground hover:text-destructive ml-1"
+                      title="Delete account"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>

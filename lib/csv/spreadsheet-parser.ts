@@ -1,16 +1,18 @@
 /**
- * Parser for cash balance CSV data.
- * Auto-detects checking/savings rows from spreadsheet sections like "Sheet 1: 2024".
+ * Unified parser for monthly balance CSV data.
+ * Extracts both credit card balances and cash account balances from spreadsheet sections.
  */
 
-export interface ParsedCashMonth {
+export interface ParsedMonth {
   year: number
   month: number
+  cardBalances: { cardName: string; balance: number }[]
   accountBalances: { accountName: string; balance: number }[]
 }
 
-export interface ParsedCashData {
-  months: ParsedCashMonth[]
+export interface ParsedSpreadsheetData {
+  months: ParsedMonth[]
+  cardNames: string[]
   accountNames: string[]
   errors: string[]
 }
@@ -54,45 +56,79 @@ function parseMonthHeader(header: string): { month: number; year: number } | nul
   return null
 }
 
-// Patterns that indicate a row is a cash account
+// Credit card indicators
+const CARD_INDICATORS = [
+  'balance',    // "Sapphire Balance", "Freedom Balance"
+  'card',       // "Apple Card"
+  'visa',       // "Gap Visa"
+  'mastercard',
+  'amex',
+  'discover',
+  'chase',
+  'citi',
+  'capital one',
+]
+
+// Cash account indicators
 const CASH_ACCOUNT_INDICATORS = [
   'checking',
   'savings',
 ]
 
-// Rows to exclude from cash account detection
-const NON_CASH_PATTERNS = [
-  'desired',      // "Checking Desired End"
-  'available',    // "Available Checking"
-  'payment',      // "Checking Payment"
-  'transfer',     // Skip transfer rows
+// Rows to exclude from both detections
+const EXCLUDED_PATTERNS = [
+  'mortgage',
+  'transfer',
+  'payment',
+  'available',
+  'credit',     // "2020 Credit" is a total row
+  'desired',
+  'wealthfront',
+  'car payment',
 ]
 
-// Detect if a row name looks like a cash account
-function isCashAccountRow(rowName: string): boolean {
+type RowType = 'card' | 'cash' | 'none'
+
+// Classify a row
+function classifyRow(rowName: string): RowType {
   const lower = rowName.toLowerCase()
 
-  // First check if it's explicitly excluded
-  if (NON_CASH_PATTERNS.some(pattern => lower.includes(pattern))) {
-    return false
+  // Check exclusions first
+  if (EXCLUDED_PATTERNS.some(pattern => lower.includes(pattern))) {
+    return 'none'
   }
 
-  // Then check if it matches any cash account indicator
-  return CASH_ACCOUNT_INDICATORS.some(indicator => lower.includes(indicator))
+  // Check for cash accounts first (more specific)
+  if (CASH_ACCOUNT_INDICATORS.some(indicator => lower.includes(indicator))) {
+    return 'cash'
+  }
+
+  // Then check for credit cards
+  if (CARD_INDICATORS.some(indicator => lower.includes(indicator))) {
+    return 'card'
+  }
+
+  return 'none'
 }
 
-// Extract a clean account name from the row name
-function extractAccountName(rowName: string): string {
-  let name = rowName.trim()
+// Extract a clean card name
+function extractCardName(rowName: string): string {
+  let cardName = rowName.trim()
+  cardName = cardName.replace(/\s*balance\s*/i, '').trim()
+  return cardName.split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
 
-  // Capitalize first letter of each word
-  return name.split(' ')
+// Extract a clean account name
+function extractAccountName(rowName: string): string {
+  return rowName.trim().split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
 }
 
 // Determine account type from name
-function getAccountType(name: string): 'checking' | 'savings' | 'money_market' | 'other' {
+export function getAccountType(name: string): 'checking' | 'savings' | 'money_market' | 'other' {
   const lower = name.toLowerCase()
   if (lower.includes('checking')) return 'checking'
   if (lower.includes('savings')) return 'savings'
@@ -100,9 +136,33 @@ function getAccountType(name: string): 'checking' | 'savings' | 'money_market' |
   return 'other'
 }
 
-export function parseCashBalanceCSV(csvContent: string): ParsedCashData {
+// Parse a CSV line handling quoted values
+function parseCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+
+    if (char === '"') {
+      inQuotes = !inQuotes
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+
+  result.push(current.trim())
+  return result
+}
+
+export function parseSpreadsheetCSV(csvContent: string): ParsedSpreadsheetData {
   const errors: string[] = []
-  const months: ParsedCashMonth[] = []
+  const months: ParsedMonth[] = []
+  const cardNamesSet = new Set<string>()
   const accountNamesSet = new Set<string>()
 
   const lines = csvContent.split('\n').map(line => line.trim())
@@ -136,6 +196,7 @@ export function parseCashBalanceCSV(csvContent: string): ParsedCashData {
             months.push({
               year: mh.year,
               month: mh.month,
+              cardBalances: [],
               accountBalances: [],
             })
           }
@@ -147,12 +208,31 @@ export function parseCashBalanceCSV(csvContent: string): ParsedCashData {
     // Skip if not in a section or no month headers yet
     if (!inSection || monthHeaders.length === 0) continue
 
-    const rowName = cells[0]?.toLowerCase().trim()
+    const rowName = cells[0]?.trim()
     if (!rowName) continue
 
-    // Only extract cash account rows
-    if (isCashAccountRow(rowName)) {
-      const accountName = extractAccountName(cells[0])
+    const rowType = classifyRow(rowName)
+
+    if (rowType === 'card') {
+      const cardName = extractCardName(rowName)
+      cardNamesSet.add(cardName)
+
+      for (let j = 0; j < monthHeaders.length && j + 1 < cells.length; j++) {
+        const mh = monthHeaders[j]
+        const value = parseCurrency(cells[j + 1])
+
+        const monthData = months.find(m => m.year === mh.year && m.month === mh.month)
+        if (monthData) {
+          const existing = monthData.cardBalances.find(c => c.cardName === cardName)
+          if (existing) {
+            existing.balance = value
+          } else {
+            monthData.cardBalances.push({ cardName, balance: value })
+          }
+        }
+      }
+    } else if (rowType === 'cash') {
+      const accountName = extractAccountName(rowName)
       accountNamesSet.add(accountName)
 
       for (let j = 0; j < monthHeaders.length && j + 1 < cells.length; j++) {
@@ -161,9 +241,9 @@ export function parseCashBalanceCSV(csvContent: string): ParsedCashData {
 
         const monthData = months.find(m => m.year === mh.year && m.month === mh.month)
         if (monthData) {
-          const existingAccount = monthData.accountBalances.find(a => a.accountName === accountName)
-          if (existingAccount) {
-            existingAccount.balance = value
+          const existing = monthData.accountBalances.find(a => a.accountName === accountName)
+          if (existing) {
+            existing.balance = value
           } else {
             monthData.accountBalances.push({ accountName, balance: value })
           }
@@ -180,32 +260,8 @@ export function parseCashBalanceCSV(csvContent: string): ParsedCashData {
 
   return {
     months,
+    cardNames: Array.from(cardNamesSet),
     accountNames: Array.from(accountNamesSet),
     errors
   }
 }
-
-// Parse a CSV line handling quoted values
-function parseCSVLine(line: string): string[] {
-  const result: string[] = []
-  let current = ''
-  let inQuotes = false
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-
-    if (char === '"') {
-      inQuotes = !inQuotes
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim())
-      current = ''
-    } else {
-      current += char
-    }
-  }
-
-  result.push(current.trim())
-  return result
-}
-
-export { getAccountType }

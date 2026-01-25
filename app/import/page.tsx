@@ -18,19 +18,11 @@ import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
 
 const importTypes = [
   {
-    value: 'cashflow_spreadsheet',
-    label: 'Credit Card Balances (Spreadsheet)',
-    description: 'Import credit card balances from a spreadsheet with monthly columns',
+    value: 'monthly_balances',
+    label: 'Monthly Balances (Spreadsheet)',
+    description: 'Import credit card balances and cash account balances from a spreadsheet',
     format: 'Sections like "Sheet 1: 2024" with monthly columns (January 2024, February 2024, etc.)',
-    example: 'Rows: Sapphire Balance, Freedom Balance, Apple Card, Gap Visa with monthly values',
-    isSpecial: true,
-  },
-  {
-    value: 'cash_balances_spreadsheet',
-    label: 'Cash Balances (Spreadsheet)',
-    description: 'Import checking/savings balances from a spreadsheet with monthly columns',
-    format: 'Sections like "Sheet 1: 2024" with monthly columns (January 2024, February 2024, etc.)',
-    example: 'Rows: Checking, Savings with monthly values',
+    example: 'Rows: Sapphire Balance, Apple Card, Checking, Savings with monthly values',
     isSpecial: true,
   },
   {
@@ -77,7 +69,7 @@ interface ImportResult {
     months?: number
     cardBalances?: number
     cardsCreated?: number
-    balances?: number
+    cashBalances?: number
     accountsCreated?: number
   }
   cardsCreated?: string[]
@@ -107,11 +99,10 @@ export default function ImportPage() {
     setResult(null)
 
     try {
-      // Special handling for spreadsheet imports
-      if (selectedType === 'cashflow_spreadsheet') {
+      if (selectedType === 'monthly_balances') {
         const csvContent = await file.text()
 
-        const res = await fetch('/api/import/cashflow', {
+        const res = await fetch('/api/import/spreadsheet', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ csvContent }),
@@ -127,26 +118,6 @@ export default function ImportPage() {
             errors: [],
             details: data.imported,
             cardsCreated: data.cardsCreated,
-          })
-        }
-      } else if (selectedType === 'cash_balances_spreadsheet') {
-        const csvContent = await file.text()
-
-        const res = await fetch('/api/import/cash-balances', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ csvContent }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          setResult({ imported: 0, errors: [data.error || 'Import failed', ...(data.details || [])] })
-        } else {
-          setResult({
-            imported: data.imported?.months || 0,
-            errors: [],
-            details: data.imported,
             accountsCreated: data.accountsCreated,
           })
         }
@@ -238,7 +209,7 @@ export default function ImportPage() {
             </Button>
 
             {result && (
-              <div className={`p-4 rounded-lg ${result.errors.length > 0 && result.imported === 0 ? 'bg-red-50' : result.errors.length > 0 ? 'bg-yellow-50' : 'bg-green-50'}`}>
+              <div className={`p-4 rounded-lg ${result.errors.length > 0 && result.imported === 0 ? 'bg-red-50 dark:bg-red-950' : result.errors.length > 0 ? 'bg-yellow-50 dark:bg-yellow-950' : 'bg-green-50 dark:bg-green-950'}`}>
                 <div className="flex items-center gap-2 mb-2">
                   {result.imported > 0 ? (
                     <CheckCircle className="h-5 w-5 text-green-600" />
@@ -247,20 +218,20 @@ export default function ImportPage() {
                   )}
                   <span className="font-medium">
                     {result.imported > 0
-                      ? `Successfully imported ${result.imported} ${selectedType === 'cashflow_spreadsheet' || selectedType === 'cash_balances_spreadsheet' ? 'months of data' : 'records'}`
+                      ? `Successfully imported ${result.imported} ${selectedType === 'monthly_balances' ? 'months of data' : 'records'}`
                       : 'Import failed'}
                   </span>
                 </div>
                 {result.details && (
-                  <div className="mt-2 text-sm text-green-700 space-y-1">
-                    {result.details.cardBalances !== undefined && (
-                      <p>{result.details.cardBalances} card balance records</p>
+                  <div className="mt-2 text-sm text-green-700 dark:text-green-300 space-y-1">
+                    {result.details.cardBalances !== undefined && result.details.cardBalances > 0 && (
+                      <p>{result.details.cardBalances} credit card balance records</p>
                     )}
                     {result.details.cardsCreated !== undefined && result.details.cardsCreated > 0 && (
                       <p>{result.details.cardsCreated} new cards created</p>
                     )}
-                    {result.details.balances !== undefined && (
-                      <p>{result.details.balances} cash balance records</p>
+                    {result.details.cashBalances !== undefined && result.details.cashBalances > 0 && (
+                      <p>{result.details.cashBalances} cash balance records</p>
                     )}
                     {result.details.accountsCreated !== undefined && result.details.accountsCreated > 0 && (
                       <p>{result.details.accountsCreated} new accounts created</p>
@@ -268,7 +239,7 @@ export default function ImportPage() {
                   </div>
                 )}
                 {result.cardsCreated && result.cardsCreated.length > 0 && (
-                  <div className="mt-2 text-sm text-blue-700">
+                  <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
                     <p className="font-medium">Cards created:</p>
                     <ul className="list-disc list-inside">
                       {result.cardsCreated.map((card, i) => (
@@ -278,7 +249,7 @@ export default function ImportPage() {
                   </div>
                 )}
                 {result.accountsCreated && result.accountsCreated.length > 0 && (
-                  <div className="mt-2 text-sm text-blue-700">
+                  <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
                     <p className="font-medium">Accounts created:</p>
                     <ul className="list-disc list-inside">
                       {result.accountsCreated.map((account, i) => (
@@ -351,29 +322,23 @@ export default function ImportPage() {
                   </div>
                 )}
 
-                {selectedType === 'cashflow_spreadsheet' && (
+                {selectedType === 'monthly_balances' && (
                   <div className="text-sm text-muted-foreground space-y-2">
-                    <p>This import auto-detects credit card rows by looking for:</p>
+                    <p>This import extracts both credit cards and cash accounts in one pass.</p>
+                    <p className="font-medium mt-3">Credit card rows detected by:</p>
                     <ul className="list-disc list-inside space-y-1">
                       <li>Rows containing &quot;Balance&quot; (e.g., Sapphire Balance)</li>
                       <li>Rows containing &quot;Card&quot; (e.g., Apple Card)</li>
                       <li>Rows containing card brands (Visa, Mastercard, Amex, etc.)</li>
                     </ul>
-                    <p className="mt-2">The importer looks for sections titled &quot;Sheet 1: YYYY&quot; with monthly columns (January 2024, February 2024, etc.).</p>
-                    <p>Credit cards will be created automatically if they don&apos;t exist.</p>
-                  </div>
-                )}
-
-                {selectedType === 'cash_balances_spreadsheet' && (
-                  <div className="text-sm text-muted-foreground space-y-2">
-                    <p>This import auto-detects cash account rows by looking for:</p>
+                    <p className="font-medium mt-3">Cash account rows detected by:</p>
                     <ul className="list-disc list-inside space-y-1">
                       <li>Rows containing &quot;Checking&quot;</li>
                       <li>Rows containing &quot;Savings&quot;</li>
                     </ul>
-                    <p className="mt-2">Rows with &quot;Desired&quot;, &quot;Available&quot;, &quot;Payment&quot;, or &quot;Transfer&quot; are excluded.</p>
+                    <p className="mt-3">Rows with &quot;Desired&quot;, &quot;Available&quot;, &quot;Payment&quot;, or &quot;Transfer&quot; are excluded.</p>
                     <p className="mt-2">The importer looks for sections titled &quot;Sheet 1: YYYY&quot; with monthly columns (January 2024, February 2024, etc.).</p>
-                    <p>Cash accounts will be created automatically if they don&apos;t exist.</p>
+                    <p>Cards and accounts will be created automatically if they don&apos;t exist.</p>
                   </div>
                 )}
               </div>

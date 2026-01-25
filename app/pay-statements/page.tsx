@@ -105,9 +105,22 @@ export default function PayStatementsPage() {
 
       if (res.ok) {
         const result = await res.json()
-        alert(
-          `Synced to income records:\n• Created: ${result.created}\n• Updated: ${result.updated}\n• Skipped: ${result.skipped}`
-        )
+
+        // Build message with skipped items details
+        let message = `Synced to income records:\n• Created: ${result.created}\n• Updated: ${result.updated}\n• Skipped: ${result.skipped}`
+
+        if (result.skipped > 0 && result.details) {
+          const skippedItems = result.details
+            .filter((d: { action: string; reason?: string }) => d.action === 'skipped')
+            .map((d: { reason?: string }) => d.reason)
+            .filter((r: string | undefined, i: number, arr: (string | undefined)[]) => arr.indexOf(r) === i) // unique
+
+          if (skippedItems.length > 0) {
+            message += `\n\nSkipped types:\n${skippedItems.map((r: string) => `  - ${r}`).join('\n')}`
+          }
+        }
+
+        alert(message)
         fetchData()
       } else {
         const error = await res.json()

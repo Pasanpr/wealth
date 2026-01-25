@@ -23,7 +23,7 @@ import {
 } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils/format'
 import { CashAccount } from '@/lib/types'
-import { Plus, Save } from 'lucide-react'
+import { Plus, Save, Star } from 'lucide-react'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -152,6 +152,19 @@ export default function CashBalancesPage() {
     }
   }
 
+  const handleSetDefault = async (accountId: number) => {
+    try {
+      await fetch(`/api/cash-accounts/${accountId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_default: true }),
+      })
+      fetchData()
+    } catch (error) {
+      console.error('Failed to set default:', error)
+    }
+  }
+
   const years = []
   const currentYear = new Date().getFullYear()
   for (let y = currentYear + 1; y >= currentYear - 5; y--) {
@@ -195,7 +208,45 @@ export default function CashBalancesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
+          {/* Accounts with default settings */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Accounts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Set a default account to consolidate all imported data of that type into one account.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {data.accounts.map(account => (
+                  <div
+                    key={account.id}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border ${
+                      account.is_default
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'bg-muted border-border'
+                    }`}
+                  >
+                    <span>{account.name}</span>
+                    <span className="text-xs text-muted-foreground">({account.account_type})</span>
+                    {account.is_default ? (
+                      <Star className="h-3.5 w-3.5 fill-current" />
+                    ) : (
+                      <button
+                        onClick={() => handleSetDefault(account.id)}
+                        className="text-muted-foreground hover:text-foreground"
+                        title="Set as default for this account type"
+                      >
+                        <Star className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {yearsWithData.map(yearData => (
             <Card key={yearData.year}>
               <CardHeader className="pb-3">

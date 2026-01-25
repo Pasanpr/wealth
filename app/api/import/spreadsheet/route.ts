@@ -59,16 +59,36 @@ export async function POST(request: NextRequest) {
       SELECT * FROM cash_accounts WHERE is_active = 1 ORDER BY display_order, name
     `).all() as CashAccount[]
 
-    const accountNameToId: Record<string, number> = {}
-    for (const account of existingAccounts) {
-      accountNameToId[account.name.toLowerCase()] = account.id
+    // Find default accounts by type
+    const defaultAccounts: Record<string, CashAccount | undefined> = {
+      checking: existingAccounts.find(a => a.account_type === 'checking' && a.is_default),
+      savings: existingAccounts.find(a => a.account_type === 'savings' && a.is_default),
     }
 
-    // Create missing accounts
-    const missingAccounts = parsed.accountNames.filter(name =>
-      !accountNameToId[name.toLowerCase()]
-    )
+    // Map account names to IDs, using defaults when available
+    const accountNameToId: Record<string, number> = {}
+    const missingAccounts: string[] = []
 
+    for (const accountName of parsed.accountNames) {
+      const accountType = getAccountType(accountName)
+      const defaultAccount = defaultAccounts[accountType]
+
+      if (defaultAccount) {
+        // Use the default account for this type
+        accountNameToId[accountName.toLowerCase()] = defaultAccount.id
+      } else {
+        // Look for exact match
+        const existing = existingAccounts.find(a => a.name.toLowerCase() === accountName.toLowerCase())
+        if (existing) {
+          accountNameToId[accountName.toLowerCase()] = existing.id
+        } else {
+          // Need to create this account
+          missingAccounts.push(accountName)
+        }
+      }
+    }
+
+    // Create missing accounts (only when no default exists for that type)
     for (let i = 0; i < missingAccounts.length; i++) {
       const accountName = missingAccounts[i]
       const accountType = getAccountType(accountName)

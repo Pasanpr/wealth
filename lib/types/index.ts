@@ -134,6 +134,7 @@ export interface CashAccount {
   account_type: CashAccountType
   institution: string | null
   is_active: boolean
+  is_default: boolean
   display_order: number
   created_at: string
   updated_at: string

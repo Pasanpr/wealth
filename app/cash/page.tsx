@@ -4,8 +4,20 @@ import { useEffect, useState } from 'react'
 import { PageContainer } from '@/components/layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { formatCurrency, formatNumber } from '@/lib/utils/format'
-import { DollarSign, TrendingUp, Wallet, AlertCircle } from 'lucide-react'
+import { DollarSign, TrendingUp, Wallet, AlertCircle, Calendar, ArrowUpDown } from 'lucide-react'
 import Link from 'next/link'
+
+interface IncomeData {
+  averageNetPay: number
+  expectedMonthlyIncome: number
+  payFrequency: 'biweekly' | 'semimonthly' | 'monthly' | 'unknown'
+  paychecksPerMonth: number
+  incomeVsExpenses: number
+  ytdSalaryIncome: number
+  ytdTotalIncome: number
+  lastPayDate: string | null
+  paycheckCount: number
+}
 
 interface CashHealthData {
   health: {
@@ -16,6 +28,14 @@ interface CashHealthData {
     status: 'healthy' | 'warning' | 'critical'
   }
   coverage: { months: number; amount: number; coverage: number }[]
+  income?: IncomeData
+}
+
+const PAY_FREQUENCY_LABELS: Record<string, string> = {
+  biweekly: 'Bi-weekly (every 2 weeks)',
+  semimonthly: 'Semi-monthly (2x/month)',
+  monthly: 'Monthly',
+  unknown: 'Unknown',
 }
 
 export default function CashOverview() {
@@ -103,6 +123,77 @@ export default function CashOverview() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Income Metrics from Pay Stubs */}
+          {data?.income && data.income.paycheckCount > 0 && (
+            <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Avg Net Pay</CardTitle>
+                  <DollarSign className="h-4 w-4 text-green-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(data.income.averageNetPay)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Per paycheck ({data.income.paycheckCount} this year)
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Monthly Income</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(data.income.expectedMonthlyIncome)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {PAY_FREQUENCY_LABELS[data.income.payFrequency]}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Income vs Expenses</CardTitle>
+                  <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${data.income.incomeVsExpenses >= 1 ? 'text-green-600' : 'text-red-600'}`}>
+                    {data.income.incomeVsExpenses > 0
+                      ? `${(data.income.incomeVsExpenses * 100).toFixed(0)}%`
+                      : '--'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {data.income.incomeVsExpenses >= 1
+                      ? `+${formatCurrency(data.income.expectedMonthlyIncome - (data.health.monthlyExpenseAverage || 0))}/mo surplus`
+                      : data.income.incomeVsExpenses > 0
+                        ? `${formatCurrency((data.health.monthlyExpenseAverage || 0) - data.income.expectedMonthlyIncome)}/mo shortfall`
+                        : 'Add expenses to compare'}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">YTD Income</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(data.income.ytdTotalIncome)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    From synced pay stubs
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <Card>

@@ -8,7 +8,22 @@ export async function PUT(
 ) {
   try {
     const body = await request.json()
-    const { vest_date, shares, grant_price, grant_date, grant_id, is_vested, actual_price_at_vest } = body
+    const {
+      vest_date,
+      shares,
+      grant_price,
+      grant_date,
+      grant_id,
+      is_vested,
+      actual_price_at_vest,
+      sale_date,
+      sale_price,
+      gross_proceeds,
+      taxes_withheld,
+      net_proceeds,
+      reinvested_amount,
+      cash_retained,
+    } = body
 
     const db = getDb()
     const existing = db.prepare('SELECT * FROM rsu_vesting_schedule WHERE id = ?').get(params.id)
@@ -20,9 +35,28 @@ export async function PUT(
     db.prepare(`
       UPDATE rsu_vesting_schedule
       SET vest_date = ?, shares = ?, grant_price = ?, grant_date = ?, grant_id = ?,
-          is_vested = ?, actual_price_at_vest = ?, updated_at = datetime('now')
+          is_vested = ?, actual_price_at_vest = ?,
+          sale_date = ?, sale_price = ?, gross_proceeds = ?, taxes_withheld = ?,
+          net_proceeds = ?, reinvested_amount = ?, cash_retained = ?,
+          updated_at = datetime('now')
       WHERE id = ?
-    `).run(vest_date, shares, grant_price, grant_date, grant_id || null, is_vested ? 1 : 0, actual_price_at_vest || null, params.id)
+    `).run(
+      vest_date,
+      shares,
+      grant_price,
+      grant_date,
+      grant_id || null,
+      is_vested ? 1 : 0,
+      actual_price_at_vest || null,
+      sale_date || null,
+      sale_price || null,
+      gross_proceeds || null,
+      taxes_withheld || null,
+      net_proceeds || null,
+      reinvested_amount || null,
+      cash_retained || null,
+      params.id
+    )
 
     const record = db.prepare('SELECT * FROM rsu_vesting_schedule WHERE id = ?').get(params.id) as RsuVesting
 

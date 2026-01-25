@@ -19,7 +19,22 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { vest_date, shares, grant_price, grant_date, grant_id, is_vested, actual_price_at_vest } = body
+    const {
+      vest_date,
+      shares,
+      grant_price,
+      grant_date,
+      grant_id,
+      is_vested,
+      actual_price_at_vest,
+      sale_date,
+      sale_price,
+      gross_proceeds,
+      taxes_withheld,
+      net_proceeds,
+      reinvested_amount,
+      cash_retained,
+    } = body
 
     if (!vest_date || shares === undefined || grant_price === undefined || !grant_date) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -27,9 +42,27 @@ export async function POST(request: NextRequest) {
 
     const db = getDb()
     const result = db.prepare(`
-      INSERT INTO rsu_vesting_schedule (vest_date, shares, grant_price, grant_date, grant_id, is_vested, actual_price_at_vest)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(vest_date, shares, grant_price, grant_date, grant_id || null, is_vested ? 1 : 0, actual_price_at_vest || null)
+      INSERT INTO rsu_vesting_schedule (
+        vest_date, shares, grant_price, grant_date, grant_id, is_vested, actual_price_at_vest,
+        sale_date, sale_price, gross_proceeds, taxes_withheld, net_proceeds, reinvested_amount, cash_retained
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      vest_date,
+      shares,
+      grant_price,
+      grant_date,
+      grant_id || null,
+      is_vested ? 1 : 0,
+      actual_price_at_vest || null,
+      sale_date || null,
+      sale_price || null,
+      gross_proceeds || null,
+      taxes_withheld || null,
+      net_proceeds || null,
+      reinvested_amount || null,
+      cash_retained || null
+    )
 
     const record = db.prepare('SELECT * FROM rsu_vesting_schedule WHERE id = ?').get(result.lastInsertRowid) as RsuVesting
 

@@ -22,23 +22,43 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui'
-import { formatCurrency, formatDate, formatShares } from '@/lib/utils/format'
-import { RsuVesting } from '@/lib/types'
-import { Plus, Pencil, Trash2, CheckCircle, Clock } from 'lucide-react'
+import { formatCurrency, formatDate, formatShares, formatPercent } from '@/lib/utils/format'
+import { RsuVesting, RsuMetrics } from '@/lib/types'
+import { Plus, Pencil, Trash2, DollarSign, Percent, TrendingUp, PiggyBank, Clock, CheckCircle, Upload } from 'lucide-react'
+import Link from 'next/link'
+
+interface RsuData {
+  metrics: RsuMetrics
+  historicalTaxRates: { year: number; rate: number; vestValue: number; taxesWithheld: number }[]
+  reinvestmentSummary: { year: number; netProceeds: number; reinvested: number; cashRetained: number; rate: number }[]
+}
 
 export default function RsuPage() {
   const [records, setRecords] = useState<RsuVesting[]>([])
+  const [metricsData, setMetricsData] = useState<RsuData | null>(null)
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<RsuVesting | null>(null)
+  const [stockPrice, setStockPrice] = useState('')
+  const [activeTab, setActiveTab] = useState<'vested' | 'pending'>('vested')
   const [formData, setFormData] = useState({
-    vest_date: '',
-    shares: '',
-    grant_price: '',
+    // Grant info
     grant_date: '',
     grant_id: '',
+    grant_price: '',
+    // Vesting info
+    vest_date: '',
+    shares: '',
     is_vested: false,
     actual_price_at_vest: '',
+    // Sale info
+    sale_date: '',
+    sale_price: '',
+    gross_proceeds: '',
+    taxes_withheld: '',
+    net_proceeds: '',
+    reinvested_amount: '',
+    cash_retained: '',
   })
 
   const fetchRecords = async () => {
@@ -48,23 +68,48 @@ export default function RsuPage() {
       setRecords(data)
     } catch (error) {
       console.error('Failed to fetch records:', error)
-    } finally {
-      setLoading(false)
+    }
+  }
+
+  const fetchMetrics = async () => {
+    try {
+      const url = stockPrice ? `/api/rsu/metrics?stockPrice=${stockPrice}` : '/api/rsu/metrics'
+      const res = await fetch(url)
+      const data = await res.json()
+      setMetricsData(data)
+    } catch (error) {
+      console.error('Failed to fetch metrics:', error)
     }
   }
 
   useEffect(() => {
-    fetchRecords()
+    Promise.all([fetchRecords(), fetchMetrics()]).finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    if (stockPrice) {
+      fetchMetrics()
+    }
+  }, [stockPrice])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     const payload = {
-      ...formData,
-      shares: parseFloat(formData.shares),
+      grant_date: formData.grant_date,
+      grant_id: formData.grant_id || null,
       grant_price: parseFloat(formData.grant_price),
+      vest_date: formData.vest_date,
+      shares: parseFloat(formData.shares),
+      is_vested: formData.is_vested,
       actual_price_at_vest: formData.actual_price_at_vest ? parseFloat(formData.actual_price_at_vest) : null,
+      sale_date: formData.sale_date || null,
+      sale_price: formData.sale_price ? parseFloat(formData.sale_price) : null,
+      gross_proceeds: formData.gross_proceeds ? parseFloat(formData.gross_proceeds) : null,
+      taxes_withheld: formData.taxes_withheld ? parseFloat(formData.taxes_withheld) : null,
+      net_proceeds: formData.net_proceeds ? parseFloat(formData.net_proceeds) : null,
+      reinvested_amount: formData.reinvested_amount ? parseFloat(formData.reinvested_amount) : null,
+      cash_retained: formData.cash_retained ? parseFloat(formData.cash_retained) : null,
     }
 
     try {
@@ -86,6 +131,7 @@ export default function RsuPage() {
       setEditingRecord(null)
       resetForm()
       fetchRecords()
+      fetchMetrics()
     } catch (error) {
       console.error('Failed to save record:', error)
     }
@@ -93,26 +139,40 @@ export default function RsuPage() {
 
   const resetForm = () => {
     setFormData({
-      vest_date: '',
-      shares: '',
-      grant_price: '',
       grant_date: '',
       grant_id: '',
+      grant_price: '',
+      vest_date: '',
+      shares: '',
       is_vested: false,
       actual_price_at_vest: '',
+      sale_date: '',
+      sale_price: '',
+      gross_proceeds: '',
+      taxes_withheld: '',
+      net_proceeds: '',
+      reinvested_amount: '',
+      cash_retained: '',
     })
   }
 
   const handleEdit = (record: RsuVesting) => {
     setEditingRecord(record)
     setFormData({
-      vest_date: record.vest_date,
-      shares: record.shares.toString(),
-      grant_price: record.grant_price.toString(),
       grant_date: record.grant_date,
       grant_id: record.grant_id || '',
+      grant_price: record.grant_price.toString(),
+      vest_date: record.vest_date,
+      shares: record.shares.toString(),
       is_vested: Boolean(record.is_vested),
       actual_price_at_vest: record.actual_price_at_vest?.toString() || '',
+      sale_date: record.sale_date || '',
+      sale_price: record.sale_price?.toString() || '',
+      gross_proceeds: record.gross_proceeds?.toString() || '',
+      taxes_withheld: record.taxes_withheld?.toString() || '',
+      net_proceeds: record.net_proceeds?.toString() || '',
+      reinvested_amount: record.reinvested_amount?.toString() || '',
+      cash_retained: record.cash_retained?.toString() || '',
     })
     setDialogOpen(true)
   }
@@ -123,6 +183,7 @@ export default function RsuPage() {
     try {
       await fetch(`/api/rsu/${id}`, { method: 'DELETE' })
       fetchRecords()
+      fetchMetrics()
     } catch (error) {
       console.error('Failed to delete record:', error)
     }
@@ -134,114 +195,240 @@ export default function RsuPage() {
     setDialogOpen(true)
   }
 
-  const pendingShares = records.filter(r => !r.is_vested).reduce((sum, r) => sum + r.shares, 0)
-  const vestedShares = records.filter(r => r.is_vested).reduce((sum, r) => sum + r.shares, 0)
-  const vestedValue = records
-    .filter(r => r.is_vested && r.actual_price_at_vest)
-    .reduce((sum, r) => sum + (r.shares * (r.actual_price_at_vest || 0)), 0)
+  // Auto-calculate gross proceeds when shares and sale price change
+  const handleSaleInputChange = (field: string, value: string) => {
+    const updated = { ...formData, [field]: value }
+
+    // Auto-calculate gross proceeds
+    if (field === 'shares' || field === 'sale_price') {
+      const shares = parseFloat(field === 'shares' ? value : formData.shares)
+      const salePrice = parseFloat(field === 'sale_price' ? value : formData.sale_price)
+      if (!isNaN(shares) && !isNaN(salePrice)) {
+        updated.gross_proceeds = (shares * salePrice).toFixed(2)
+      }
+    }
+
+    // Auto-calculate net proceeds
+    if (field === 'gross_proceeds' || field === 'taxes_withheld') {
+      const gross = parseFloat(field === 'gross_proceeds' ? value : updated.gross_proceeds)
+      const taxes = parseFloat(field === 'taxes_withheld' ? value : formData.taxes_withheld)
+      if (!isNaN(gross) && !isNaN(taxes)) {
+        updated.net_proceeds = (gross - taxes).toFixed(2)
+      }
+    }
+
+    setFormData(updated)
+  }
+
+  const vestedRecords = records.filter(r => r.is_vested)
+  const pendingRecords = records.filter(r => !r.is_vested)
+  const metrics = metricsData?.metrics
 
   return (
     <PageContainer
-      title="RSU Vesting Schedule"
-      description="Track your restricted stock unit vesting schedule"
+      title="RSU Tracking"
+      description="Track your RSU vesting, sales, and tax impact"
       actions={
-        <Button onClick={openNewDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Vesting
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/cash/rsu/import">
+            <Button variant="outline">
+              <Upload className="mr-2 h-4 w-4" />
+              Import
+            </Button>
+          </Link>
+          <Button onClick={openNewDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add RSU
+          </Button>
+        </div>
       }
     >
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
+      {/* Metrics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Shares</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">YTD RSU Income</CardTitle>
+            <DollarSign className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatShares(pendingShares)}</div>
-            <p className="text-xs text-muted-foreground">Unvested RSUs</p>
+            <div className="text-2xl font-bold">
+              {metrics ? formatCurrency(metrics.ytdVestValue) : '--'}
+            </div>
+            <p className="text-xs text-muted-foreground">Total vested value</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vested Shares</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Effective Tax Rate</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatShares(vestedShares)}</div>
-            <p className="text-xs text-muted-foreground">Total vested</p>
+            <div className="text-2xl font-bold">
+              {metrics ? formatPercent(metrics.effectiveTaxRate) : '--'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {metrics ? formatCurrency(metrics.ytdTaxesWithheld) : '--'} withheld
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vested Value</CardTitle>
+            <CardTitle className="text-sm font-medium">Projected Income</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(vestedValue)}</div>
-            <p className="text-xs text-muted-foreground">At vest prices</p>
+            <div className="text-2xl font-bold">
+              {metrics?.projectedIncome ? formatCurrency(metrics.projectedIncome) : '--'}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <Input
+                type="number"
+                placeholder="Stock price"
+                value={stockPrice}
+                onChange={e => setStockPrice(e.target.value)}
+                className="h-7 w-24 text-xs"
+              />
+              <span className="text-xs text-muted-foreground">
+                {metrics ? formatShares(metrics.pendingShares) : '--'} pending
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Reinvestment Rate</CardTitle>
+            <PiggyBank className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metrics ? formatPercent(metrics.reinvestmentRate) : '--'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {metrics ? formatCurrency(metrics.totalReinvested) : '--'} reinvested YTD
+            </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4">
+        <Button
+          variant={activeTab === 'vested' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('vested')}
+        >
+          <CheckCircle className="mr-2 h-4 w-4" />
+          Vested/Sold ({vestedRecords.length})
+        </Button>
+        <Button
+          variant={activeTab === 'pending' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('pending')}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          Upcoming ({pendingRecords.length})
+        </Button>
+      </div>
+
+      {/* Records Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Vesting Schedule</CardTitle>
+          <CardTitle>
+            {activeTab === 'vested' ? 'Vested & Sold RSUs' : 'Upcoming Vests'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="text-muted-foreground">Loading...</div>
-          ) : records.length === 0 ? (
+          ) : (activeTab === 'vested' ? vestedRecords : pendingRecords).length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No RSU vesting records yet. Click &quot;Add Vesting&quot; to get started.
+              {activeTab === 'vested'
+                ? 'No vested RSU records yet. Add your historical vest data.'
+                : 'No upcoming vests scheduled.'}
             </div>
-          ) : (
+          ) : activeTab === 'vested' ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Vest Date</TableHead>
                   <TableHead>Grant ID</TableHead>
                   <TableHead className="text-right">Shares</TableHead>
-                  <TableHead className="text-right">Grant Price</TableHead>
                   <TableHead className="text-right">Vest Price</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead className="text-right">Gross</TableHead>
+                  <TableHead className="text-right">Taxes</TableHead>
+                  <TableHead className="text-right">Net</TableHead>
+                  <TableHead className="text-right">Reinvested</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {records.map(record => (
+                {vestedRecords.map(record => (
                   <TableRow key={record.id}>
                     <TableCell>{formatDate(record.vest_date)}</TableCell>
                     <TableCell>{record.grant_id || '-'}</TableCell>
                     <TableCell className="text-right">{formatShares(record.shares)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(record.grant_price)}</TableCell>
                     <TableCell className="text-right">
                       {record.actual_price_at_vest ? formatCurrency(record.actual_price_at_vest) : '-'}
                     </TableCell>
-                    <TableCell>
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
-                        record.is_vested
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {record.is_vested ? 'Vested' : 'Pending'}
-                      </span>
+                    <TableCell className="text-right">
+                      {record.gross_proceeds ? formatCurrency(record.gross_proceeds) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {record.taxes_withheld ? formatCurrency(record.taxes_withheld) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {record.net_proceeds ? formatCurrency(record.net_proceeds) : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {record.reinvested_amount ? formatCurrency(record.reinvested_amount) : '-'}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(record)}
-                        >
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(record)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(record.id)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vest Date</TableHead>
+                  <TableHead>Grant ID</TableHead>
+                  <TableHead>Grant Date</TableHead>
+                  <TableHead className="text-right">Shares</TableHead>
+                  <TableHead className="text-right">Grant Price</TableHead>
+                  <TableHead className="text-right">Est. Value</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingRecords.map(record => (
+                  <TableRow key={record.id}>
+                    <TableCell>{formatDate(record.vest_date)}</TableCell>
+                    <TableCell>{record.grant_id || '-'}</TableCell>
+                    <TableCell>{formatDate(record.grant_date)}</TableCell>
+                    <TableCell className="text-right">{formatShares(record.shares)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(record.grant_price)}</TableCell>
+                    <TableCell className="text-right">
+                      {stockPrice
+                        ? formatCurrency(record.shares * parseFloat(stockPrice))
+                        : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(record)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(record.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -254,16 +441,19 @@ export default function RsuPage() {
         </CardContent>
       </Card>
 
+      {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingRecord ? 'Edit RSU Vesting' : 'Add RSU Vesting'}
+              {editingRecord ? 'Edit RSU Record' : 'Add RSU Record'}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              {/* Grant Info Section */}
+              <div className="text-sm font-medium text-muted-foreground">Grant Information</div>
+              <div className="grid grid-cols-3 gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="grant_date">Grant Date</Label>
                   <Input
@@ -275,34 +465,12 @@ export default function RsuPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="vest_date">Vest Date</Label>
+                  <Label htmlFor="grant_id">Grant ID</Label>
                   <Input
-                    id="vest_date"
-                    type="date"
-                    value={formData.vest_date}
-                    onChange={e => setFormData({ ...formData, vest_date: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="grant_id">Grant ID (Optional)</Label>
-                <Input
-                  id="grant_id"
-                  value={formData.grant_id}
-                  onChange={e => setFormData({ ...formData, grant_id: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="shares">Shares</Label>
-                  <Input
-                    id="shares"
-                    type="number"
-                    step="0.0001"
-                    value={formData.shares}
-                    onChange={e => setFormData({ ...formData, shares: e.target.value })}
-                    required
+                    id="grant_id"
+                    value={formData.grant_id}
+                    onChange={e => setFormData({ ...formData, grant_id: e.target.value })}
+                    placeholder="Optional"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -317,6 +485,44 @@ export default function RsuPage() {
                   />
                 </div>
               </div>
+
+              {/* Vesting Info Section */}
+              <div className="text-sm font-medium text-muted-foreground mt-4">Vesting Information</div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="vest_date">Vest Date</Label>
+                  <Input
+                    id="vest_date"
+                    type="date"
+                    value={formData.vest_date}
+                    onChange={e => setFormData({ ...formData, vest_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="shares">Shares</Label>
+                  <Input
+                    id="shares"
+                    type="number"
+                    step="0.0001"
+                    value={formData.shares}
+                    onChange={e => handleSaleInputChange('shares', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="actual_price_at_vest">Vest Price (FMV)</Label>
+                  <Input
+                    id="actual_price_at_vest"
+                    type="number"
+                    step="0.01"
+                    value={formData.actual_price_at_vest}
+                    onChange={e => setFormData({ ...formData, actual_price_at_vest: e.target.value })}
+                    placeholder="Price at vesting"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -324,19 +530,96 @@ export default function RsuPage() {
                   checked={formData.is_vested}
                   onChange={e => setFormData({ ...formData, is_vested: e.target.checked })}
                 />
-                <Label htmlFor="is_vested">Already vested</Label>
+                <Label htmlFor="is_vested">Vested (shares have been released)</Label>
               </div>
+
+              {/* Sale Info Section - only shown when vested */}
               {formData.is_vested && (
-                <div className="grid gap-2">
-                  <Label htmlFor="actual_price_at_vest">Price at Vest</Label>
-                  <Input
-                    id="actual_price_at_vest"
-                    type="number"
-                    step="0.01"
-                    value={formData.actual_price_at_vest}
-                    onChange={e => setFormData({ ...formData, actual_price_at_vest: e.target.value })}
-                  />
-                </div>
+                <>
+                  <div className="text-sm font-medium text-muted-foreground mt-4">Sale Information</div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="sale_date">Sale Date</Label>
+                      <Input
+                        id="sale_date"
+                        type="date"
+                        value={formData.sale_date}
+                        onChange={e => setFormData({ ...formData, sale_date: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="sale_price">Sale Price</Label>
+                      <Input
+                        id="sale_price"
+                        type="number"
+                        step="0.01"
+                        value={formData.sale_price}
+                        onChange={e => handleSaleInputChange('sale_price', e.target.value)}
+                        placeholder="Per share"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="gross_proceeds">Gross Proceeds</Label>
+                      <Input
+                        id="gross_proceeds"
+                        type="number"
+                        step="0.01"
+                        value={formData.gross_proceeds}
+                        onChange={e => handleSaleInputChange('gross_proceeds', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="taxes_withheld">Taxes Withheld</Label>
+                      <Input
+                        id="taxes_withheld"
+                        type="number"
+                        step="0.01"
+                        value={formData.taxes_withheld}
+                        onChange={e => handleSaleInputChange('taxes_withheld', e.target.value)}
+                        placeholder="Broker withheld"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="net_proceeds">Net Proceeds</Label>
+                      <Input
+                        id="net_proceeds"
+                        type="number"
+                        step="0.01"
+                        value={formData.net_proceeds}
+                        onChange={e => setFormData({ ...formData, net_proceeds: e.target.value })}
+                      />
+                    </div>
+                    <div />
+                  </div>
+
+                  <div className="text-sm font-medium text-muted-foreground mt-4">Distribution</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="reinvested_amount">Reinvested Amount</Label>
+                      <Input
+                        id="reinvested_amount"
+                        type="number"
+                        step="0.01"
+                        value={formData.reinvested_amount}
+                        onChange={e => setFormData({ ...formData, reinvested_amount: e.target.value })}
+                        placeholder="Into other investments"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="cash_retained">Cash Retained</Label>
+                      <Input
+                        id="cash_retained"
+                        type="number"
+                        step="0.01"
+                        value={formData.cash_retained}
+                        onChange={e => setFormData({ ...formData, cash_retained: e.target.value })}
+                        placeholder="Kept as cash"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
             </div>
             <DialogFooter>

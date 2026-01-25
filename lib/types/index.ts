@@ -91,16 +91,53 @@ export interface IncomeRecord {
   updated_at: string
 }
 
-// RSU Vesting Schedule
+// RSU Vesting Schedule with sale tracking
 export interface RsuVesting {
   id: number
-  vest_date: string
-  shares: number
-  grant_price: number
+  // Grant info
   grant_date: string
   grant_id: string | null
+  grant_price: number
+  // Vesting info
+  vest_date: string
+  shares: number
   is_vested: boolean
-  actual_price_at_vest: number | null
+  actual_price_at_vest: number | null // FMV at vesting (vest_price)
+  // Sale tracking (populated when shares are sold)
+  sale_date: string | null
+  sale_price: number | null
+  gross_proceeds: number | null
+  taxes_withheld: number | null
+  net_proceeds: number | null
+  reinvested_amount: number | null
+  cash_retained: number | null
+  // Timestamps
+  created_at: string
+  updated_at: string
+}
+
+// RSU summary metrics for dashboard
+export interface RsuMetrics {
+  ytdVestValue: number // Total value of vested RSUs this year (shares × vest_price)
+  ytdTaxesWithheld: number // Total taxes withheld this year
+  effectiveTaxRate: number // ytdTaxesWithheld / ytdVestValue
+  totalReinvested: number // Total reinvested this year
+  reinvestmentRate: number // reinvested / net proceeds
+  projectedIncome: number // Future vests × current price
+  pendingShares: number // Unvested shares
+  vestedShares: number // Total vested shares
+}
+
+// RSU W-2 data for tax reconciliation
+export interface RsuW2Data {
+  id: number
+  year: number
+  total_rsu_income: number
+  federal_withheld: number
+  state_withheld: number
+  social_security_withheld: number
+  medicare_withheld: number
+  notes: string | null
   created_at: string
   updated_at: string
 }

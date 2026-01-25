@@ -19,7 +19,7 @@ import { PaySummary } from '@/components/pay-statements/pay-summary'
 import { StatementList } from '@/components/pay-statements/statement-list'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { PayStatement, YtdPaySummary } from '@/lib/types'
-import { Upload, FileText, History, Info } from 'lucide-react'
+import { Upload, FileText, History, Info, RefreshCw, Check } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +33,8 @@ export default function PayStatementsPage() {
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [ytdSummary, setYtdSummary] = useState<YtdPaySummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [syncStatus, setSyncStatus] = useState<Map<number, boolean>>(new Map())
+  const [syncing, setSyncing] = useState(false)
 
   const fetchData = async () => {
     try {
@@ -53,6 +55,20 @@ export default function PayStatementsPage() {
       // Set default year if not set
       if (!selectedYear && statementsData.years?.length > 0) {
         setSelectedYear(String(statementsData.years[0]))
+      }
+
+      // Fetch sync status if we have a year
+      const yearToFetch = year || statementsData.years?.[0]
+      if (yearToFetch) {
+        const syncRes = await fetch(`/api/pay-statements/sync?year=${yearToFetch}`)
+        if (syncRes.ok) {
+          const syncData = await syncRes.json()
+          const statusMap = new Map<number, boolean>()
+          syncData.statements?.forEach((s: { id: number; isSynced: boolean }) => {
+            statusMap.set(s.id, s.isSynced)
+          })
+          setSyncStatus(statusMap)
+        }
       }
     } catch (error) {
       console.error('Failed to fetch data:', error)
@@ -76,6 +92,38 @@ export default function PayStatementsPage() {
     }
   }
 
+  const handleSyncToIncome = async () => {
+    if (!selectedYear) return
+
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/pay-statements/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: parseInt(selectedYear, 10) }),
+      })
+
+      if (res.ok) {
+        const result = await res.json()
+        alert(
+          `Synced to income records:\n• Created: ${result.created}\n• Updated: ${result.updated}\n• Skipped: ${result.skipped}`
+        )
+        fetchData()
+      } else {
+        const error = await res.json()
+        alert(`Sync failed: ${error.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to sync:', error)
+      alert('Failed to sync pay statements to income')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const unsyncedCount = Array.from(syncStatus.values()).filter(v => !v).length
+  const allSynced = syncStatus.size > 0 && unsyncedCount === 0
+
   const recentStatements = statements.slice(0, 5)
 
   return (
@@ -90,6 +138,30 @@ export default function PayStatementsPage() {
               History
             </Link>
           </Button>
+          {statements.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleSyncToIncome}
+              disabled={syncing || allSynced}
+            >
+              {syncing ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Syncing...
+                </>
+              ) : allSynced ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Synced
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Sync to Income{unsyncedCount > 0 ? ` (${unsyncedCount})` : ''}
+                </>
+              )}
+            </Button>
+          )}
           <Button asChild>
             <Link href="/pay-statements/import">
               <Upload className="mr-2 h-4 w-4" />

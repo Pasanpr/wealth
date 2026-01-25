@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Reference AGENTS.md for additional instructions.
+
 ## Commands
 
 ```bash
@@ -36,6 +38,7 @@ No testing framework is currently configured.
 ### Key Patterns
 
 **Database Access:**
+
 ```typescript
 import { getDb } from '@/lib/db'
 const db = getDb()
@@ -58,3 +61,15 @@ SQLite with WAL mode and foreign keys enabled. Migrations in `/lib/db/migrations
 
 - `next.config.js` - Marks better-sqlite3 as server external package
 - Path alias `@/*` maps to project root
+
+## Task Management
+
+**Use Beads exclusively** for all task tracking. Do NOT use TodoWrite or TaskCreate tools.
+
+```bash
+bd ready              # Find available work
+bd create --title="..." --type=task --priority=2
+bd update <id> --status=in_progress
+bd close <id>
+bd sync               # Sync at session end
+```

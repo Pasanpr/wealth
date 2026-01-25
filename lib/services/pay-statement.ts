@@ -419,3 +419,166 @@ export function getAnnualSalary(year: number): number {
     .get(String(year)) as { total: number | null }
   return result.total ?? 0
 }
+
+/**
+ * Income type mapping from pay statement item codes
+ */
+type IncomeType = 'salary' | 'rsu_vesting' | 'bonus' | 'other'
+
+interface SyncResult {
+  created: number
+  updated: number
+  skipped: number
+  details: Array<{
+    incomeType: IncomeType
+    amount: number
+    action: 'created' | 'updated' | 'skipped'
+    reason?: string
+  }>
+}
+
+/**
+ * Sync a pay statement to income records
+ * Creates/updates income records based on pay statement line items:
+ * - REGULAR -> salary
+ * - RSU_VEST -> rsu_vesting
+ * - BONUS -> bonus
+ * - DIV_EQV (dividend equivalents) -> other
+ */
+export function syncPayStatementToIncome(statementId: number): SyncResult {
+  const db = getDb()
+  const result: SyncResult = { created: 0, updated: 0, skipped: 0, details: [] }
+
+  // Get the pay statement with items
+  const statement = getPayStatementById(statementId)
+  if (!statement) {
+    throw new Error(`Pay statement ${statementId} not found`)
+  }
+
+  // Define mapping from item codes to income types
+  const itemCodeToIncomeType: Record<string, IncomeType> = {
+    REGULAR: 'salary',
+    RSU_VEST: 'rsu_vesting',
+    BONUS: 'bonus',
+    DIV_EQV: 'other',
+  }
+
+  // Get earnings items that should create income records
+  const earningsItems = statement.items.filter(
+    item => item.category_code === 'earnings' && item.current_amount > 0
+  )
+
+  for (const item of earningsItems) {
+    const incomeType = itemCodeToIncomeType[item.item_code]
+    if (!incomeType) {
+      // Skip earnings types we don't track (like GYM_SUBSIDY)
+      result.skipped++
+      result.details.push({
+        incomeType: 'other',
+        amount: item.current_amount,
+        action: 'skipped',
+        reason: `Untracked earning type: ${item.item_code}`,
+      })
+      continue
+    }
+
+    // Check if an income record already exists for this statement + type
+    const existing = db
+      .prepare(
+        `SELECT id FROM income_records
+         WHERE pay_statement_id = ? AND income_type = ?`
+      )
+      .get(statementId, incomeType) as { id: number } | undefined
+
+    const description = `${item.item_name} - Pay Date ${statement.pay_date}`
+    const isRecurring = incomeType === 'salary' ? 1 : 0
+
+    if (existing) {
+      // Update existing record
+      db.prepare(
+        `UPDATE income_records
+         SET amount = ?, date = ?, description = ?, updated_at = datetime('now')
+         WHERE id = ?`
+      ).run(item.current_amount, statement.pay_date, description, existing.id)
+
+      result.updated++
+      result.details.push({
+        incomeType,
+        amount: item.current_amount,
+        action: 'updated',
+      })
+    } else {
+      // Create new record
+      db.prepare(
+        `INSERT INTO income_records
+         (income_type, amount, date, description, is_recurring, pay_statement_id)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(incomeType, item.current_amount, statement.pay_date, description, isRecurring, statementId)
+
+      result.created++
+      result.details.push({
+        incomeType,
+        amount: item.current_amount,
+        action: 'created',
+      })
+    }
+  }
+
+  return result
+}
+
+/**
+ * Sync all pay statements from a given year to income records
+ */
+export function syncYearToIncome(year: number): SyncResult {
+  const statements = getPayStatements(year)
+  const combinedResult: SyncResult = { created: 0, updated: 0, skipped: 0, details: [] }
+
+  for (const statement of statements) {
+    const result = syncPayStatementToIncome(statement.id)
+    combinedResult.created += result.created
+    combinedResult.updated += result.updated
+    combinedResult.skipped += result.skipped
+    combinedResult.details.push(...result.details)
+  }
+
+  return combinedResult
+}
+
+/**
+ * Check if a pay statement has been synced to income records
+ */
+export function isPayStatementSynced(statementId: number): boolean {
+  const db = getDb()
+  const result = db
+    .prepare('SELECT COUNT(*) as count FROM income_records WHERE pay_statement_id = ?')
+    .get(statementId) as { count: number }
+  return result.count > 0
+}
+
+/**
+ * Get sync status for multiple pay statements
+ */
+export function getPayStatementSyncStatus(statementIds: number[]): Map<number, boolean> {
+  const db = getDb()
+  const statusMap = new Map<number, boolean>()
+
+  if (statementIds.length === 0) return statusMap
+
+  const placeholders = statementIds.map(() => '?').join(',')
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT pay_statement_id
+       FROM income_records
+       WHERE pay_statement_id IN (${placeholders})`
+    )
+    .all(...statementIds) as { pay_statement_id: number }[]
+
+  const syncedIds = new Set(rows.map(r => r.pay_statement_id))
+
+  for (const id of statementIds) {
+    statusMap.set(id, syncedIds.has(id))
+  }
+
+  return statusMap
+}

@@ -1,6 +1,8 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+This project uses **bd** (beads) as the ONLY task management system. Do NOT use TodoWrite or TaskCreate tools—all work tracking must go through Beads.
+
+Run `bd onboard` to get started.
 
 ## Quick Reference
 

@@ -15,8 +15,10 @@ import {
   Briefcase,
   ChevronDown,
   ChevronRight,
+  FileText,
 } from 'lucide-react'
 import { useState } from 'react'
+import { ThemeToggle } from '@/components/theme/theme-toggle'
 
 interface NavItem {
   title: string
@@ -41,6 +43,16 @@ const navItems: NavItem[] = [
       { title: 'RSU Vesting', href: '/cash/rsu' },
       { title: 'Expenses', href: '/cash/expenses' },
       { title: 'Cash Health', href: '/cash/health' },
+    ],
+  },
+  {
+    title: 'Pay Statements',
+    href: '/pay-statements',
+    icon: FileText,
+    children: [
+      { title: 'Dashboard', href: '/pay-statements' },
+      { title: 'Import', href: '/pay-statements/import' },
+      { title: 'History', href: '/pay-statements/history' },
     ],
   },
   {
@@ -82,13 +94,14 @@ const navItems: NavItem[] = [
       { title: 'Securities', href: '/settings/securities' },
       { title: 'Fixed Expenses', href: '/settings/fixed-expenses' },
       { title: 'Tax Profile', href: '/settings/tax-profile' },
+      { title: 'Data Management', href: '/settings/data-management' },
     ],
   },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
-  const [expandedItems, setExpandedItems] = useState<string[]>(['/cash', '/cashflow', '/portfolio', '/settings'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(['/cash', '/pay-statements', '/cashflow', '/portfolio', '/settings'])
 
   const toggleExpanded = (href: string) => {
     setExpandedItems(prev =>
@@ -99,6 +112,10 @@ export function Sidebar() {
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/'
     return pathname.startsWith(href)
+  }
+
+  const getIconColor = (isActiveItem: boolean) => {
+    return isActiveItem ? 'text-primary' : ''
   }
 
   return (
@@ -123,7 +140,7 @@ export function Sidebar() {
                     )}
                   >
                     <span className="flex items-center">
-                      <item.icon className="mr-3 h-4 w-4" />
+                      <item.icon className={cn('mr-3 h-4 w-4', getIconColor(isActive(item.href)))} />
                       {item.title}
                     </span>
                     {expandedItems.includes(item.href) ? (
@@ -162,7 +179,7 @@ export function Sidebar() {
                       : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                   )}
                 >
-                  <item.icon className="mr-3 h-4 w-4" />
+                  <item.icon className={cn('mr-3 h-4 w-4', getIconColor(isActive(item.href)))} />
                   {item.title}
                 </Link>
               )}
@@ -170,6 +187,11 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+      <div className="border-t p-4">
+        <div className="flex items-center justify-center">
+          <ThemeToggle />
+        </div>
+      </div>
     </div>
   )
 }

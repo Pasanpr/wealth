@@ -301,3 +301,151 @@ export interface MonthlyCashFlow {
   checkingPayment: number
   savingsPayment: number
 }
+
+// Pay Statement Types
+export type PaySourceType = 'adp' | 'manual' | 'other'
+
+export type PayItemCategoryCode =
+  | 'earnings'
+  | 'statutory_tax'
+  | 'pretax_deduction'
+  | 'posttax_deduction'
+  | 'employer_benefit'
+  | 'adjustment'
+  | 'rsu_withholding' // Informational only - not stored in DB, excluded from deduction totals
+
+export interface PayItemCategory {
+  id: number
+  code: PayItemCategoryCode
+  name: string
+  display_order: number
+  created_at: string
+}
+
+export interface PayItemCode {
+  id: number
+  category_id: number
+  code: string
+  name: string
+  aliases: string | null
+  created_at: string
+}
+
+export interface PayStatement {
+  id: number
+  period_start: string
+  period_end: string
+  pay_date: string
+  source_type: PaySourceType
+  source_file_hash: string | null
+  gross_earnings: number
+  total_taxes: number
+  total_deductions: number
+  employer_benefits: number
+  net_pay: number
+  ytd_gross_earnings: number | null
+  ytd_total_taxes: number | null
+  ytd_total_deductions: number | null
+  ytd_net_pay: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PayStatementItem {
+  id: number
+  pay_statement_id: number
+  category_id: number
+  item_code: string
+  item_name: string
+  current_amount: number
+  ytd_amount: number | null
+  hours: number | null
+  rate: number | null
+  created_at: string
+}
+
+export interface PayStatementItemWithCategory extends PayStatementItem {
+  category_code: PayItemCategoryCode
+  category_name: string
+}
+
+export interface PayStatementDeposit {
+  id: number
+  pay_statement_id: number
+  account_type: string
+  account_last4: string | null
+  amount: number
+  created_at: string
+}
+
+export interface PayStatementWithItems extends PayStatement {
+  items: PayStatementItemWithCategory[]
+  deposits: PayStatementDeposit[]
+}
+
+// Parsed pay statement from PDF (before saving to DB)
+export interface ParsedPayStatement {
+  periodStart: string
+  periodEnd: string
+  payDate: string
+  sourceType: PaySourceType
+  grossEarnings: number
+  totalTaxes: number
+  totalDeductions: number
+  employerBenefits: number
+  netPay: number
+  ytdGrossEarnings?: number
+  ytdTotalTaxes?: number
+  ytdTotalDeductions?: number
+  ytdNetPay?: number
+  items: ParsedPayItem[]
+  deposits: ParsedDeposit[]
+}
+
+export interface ParsedPayItem {
+  categoryCode: PayItemCategoryCode
+  itemCode: string
+  itemName: string
+  currentAmount: number
+  ytdAmount?: number
+  hours?: number
+  rate?: number
+}
+
+export interface ParsedDeposit {
+  accountType: string
+  accountLast4?: string
+  amount: number
+}
+
+// Annual pay summary
+export interface AnnualPaySummary {
+  year: number
+  totalGrossEarnings: number
+  totalTaxes: number
+  totalDeductions: number
+  totalEmployerBenefits: number
+  totalNetPay: number
+  statementCount: number
+  byCategory: {
+    earnings: { [code: string]: number }
+    taxes: { [code: string]: number }
+    pretaxDeductions: { [code: string]: number }
+    posttaxDeductions: { [code: string]: number }
+    employerBenefits: { [code: string]: number }
+    adjustments: { [code: string]: number }
+  }
+}
+
+// YTD summary
+export interface YtdPaySummary {
+  year: number
+  asOfDate: string
+  grossEarnings: number
+  totalTaxes: number
+  totalDeductions: number
+  employerBenefits: number
+  netPay: number
+  statementCount: number
+}

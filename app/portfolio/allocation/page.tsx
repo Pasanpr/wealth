@@ -54,9 +54,9 @@ export default function AllocationPage() {
   const getActionIcon = (action: string) => {
     switch (action) {
       case 'buy':
-        return <ArrowUp className="h-4 w-4 text-green-600" />
+        return <ArrowUp className="h-4 w-4 text-green-600 dark:text-green-300" />
       case 'sell':
-        return <ArrowDown className="h-4 w-4 text-red-600" />
+        return <ArrowDown className="h-4 w-4 text-red-600 dark:text-red-300" />
       default:
         return <Minus className="h-4 w-4 text-muted-foreground" />
     }
@@ -65,9 +65,9 @@ export default function AllocationPage() {
   const getActionColor = (action: string) => {
     switch (action) {
       case 'buy':
-        return 'text-green-600'
+        return 'text-green-600 dark:text-green-300'
       case 'sell':
-        return 'text-red-600'
+        return 'text-red-600 dark:text-red-300'
       default:
         return 'text-muted-foreground'
     }
@@ -95,7 +95,7 @@ export default function AllocationPage() {
                 {data.needsRebalancing ? (
                   <AlertTriangle className="h-8 w-8 text-yellow-600" />
                 ) : (
-                  <CheckCircle className="h-8 w-8 text-green-600" />
+                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-300" />
                 )}
                 <div>
                   <h3 className="text-xl font-semibold mb-1">
@@ -188,7 +188,7 @@ export default function AllocationPage() {
                         <td className="p-3 text-right">{formatCurrency(item.currentValue)}</td>
                         <td className="p-3 text-right">{formatPercent(item.currentAllocation)}</td>
                         <td className="p-3 text-right">{formatPercent(item.targetAllocation)}</td>
-                        <td className={`p-3 text-right ${item.difference > 0 ? 'text-red-600' : item.difference < 0 ? 'text-green-600' : ''}`}>
+                        <td className={`p-3 text-right ${item.difference > 0 ? 'text-red-600 dark:text-red-300' : item.difference < 0 ? 'text-green-600 dark:text-green-300' : ''}`}>
                           {item.difference > 0 ? '+' : ''}{formatPercent(item.difference)}
                         </td>
                         <td className="p-3">

@@ -11,7 +11,7 @@ import {
   Input,
   Label,
 } from '@/components/ui'
-import { Save, Settings2 } from 'lucide-react'
+import { Save, Settings2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 
 interface Settings {
@@ -160,6 +160,18 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium">Tax Profile</span>
                   <p className="text-xs text-muted-foreground">
                     Set up income and tax rates for RSU calculations
+                  </p>
+                </div>
+              </Link>
+              <Link
+                href="/settings/data-management"
+                className="flex items-center rounded-md border border-destructive/30 p-3 hover:bg-destructive/5"
+              >
+                <AlertTriangle className="mr-3 h-4 w-4 text-destructive" />
+                <div>
+                  <span className="text-sm font-medium">Data Management</span>
+                  <p className="text-xs text-muted-foreground">
+                    Reset or clear specific data sections
                   </p>
                 </div>
               </Link>

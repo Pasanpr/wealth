@@ -42,7 +42,6 @@ const navItems: NavItem[] = [
       { title: 'Cash Balances', href: '/cash/balances' },
       { title: 'Income', href: '/cash/income' },
       { title: 'RSU Vesting', href: '/cash/rsu' },
-      { title: 'Expenses', href: '/cash/expenses' },
       { title: 'Cash Health', href: '/cash/health' },
     ],
   },

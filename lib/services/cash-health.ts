@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db'
-import { CashHealthMetrics, CashBalance, YearlyExpense } from '@/lib/types'
+import { CashHealthMetrics } from '@/lib/types'
 
 export interface IncomeMetrics {
   averageNetPay: number
@@ -16,31 +16,33 @@ export interface IncomeMetrics {
 export function calculateCashHealth(): CashHealthMetrics {
   const db = getDb()
 
-  // Get latest cash balance per account
+  // Get latest cash balance per account from monthly_cash_balances
   const latestBalances = db.prepare(`
-    SELECT cb1.*
-    FROM cash_balances cb1
+    SELECT mcb.cash_account_id, mcb.balance, mcb.year, mcb.month
+    FROM monthly_cash_balances mcb
+    INNER JOIN cash_accounts ca ON mcb.cash_account_id = ca.id AND ca.is_active = 1
     INNER JOIN (
-      SELECT account_name, MAX(date) as max_date
-      FROM cash_balances
-      GROUP BY account_name
-    ) cb2 ON cb1.account_name = cb2.account_name AND cb1.date = cb2.max_date
-  `).all() as CashBalance[]
+      SELECT cash_account_id, MAX(year * 100 + month) as max_period
+      FROM monthly_cash_balances
+      GROUP BY cash_account_id
+    ) latest ON mcb.cash_account_id = latest.cash_account_id
+      AND (mcb.year * 100 + mcb.month) = latest.max_period
+  `).all() as { cash_account_id: number; balance: number; year: number; month: number }[]
 
   const totalCash = latestBalances.reduce((sum, b) => sum + b.balance, 0)
 
-  // Get yearly expenses for average calculation
-  const expenses = db.prepare(`
-    SELECT * FROM yearly_expenses
-    ORDER BY year DESC
-    LIMIT 3
-  `).all() as YearlyExpense[]
+  // Calculate monthly expense average from credit card spending
+  const spendingData = db.prepare(`
+    SELECT year, month, SUM(amount) as total
+    FROM credit_card_spending
+    GROUP BY year, month
+    ORDER BY year DESC, month DESC
+  `).all() as { year: number; month: number; total: number }[]
 
   let monthlyExpenseAverage = 0
-  if (expenses.length > 0) {
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.total_amount, 0)
-    const monthCount = expenses.length * 12
-    monthlyExpenseAverage = totalExpenses / monthCount
+  if (spendingData.length > 0) {
+    const totalSpending = spendingData.reduce((sum, s) => sum + s.total, 0)
+    monthlyExpenseAverage = totalSpending / spendingData.length
   }
 
   // Get target months from settings
@@ -68,27 +70,30 @@ export function calculateCashHealth(): CashHealthMetrics {
 export function getExpenseCoverage(): { months: number; amount: number; coverage: number }[] {
   const db = getDb()
 
-  // Get latest cash balance per account
+  // Get latest cash balance per account from monthly_cash_balances
   const latestBalances = db.prepare(`
-    SELECT cb1.*
-    FROM cash_balances cb1
+    SELECT mcb.cash_account_id, mcb.balance, mcb.year, mcb.month
+    FROM monthly_cash_balances mcb
+    INNER JOIN cash_accounts ca ON mcb.cash_account_id = ca.id AND ca.is_active = 1
     INNER JOIN (
-      SELECT account_name, MAX(date) as max_date
-      FROM cash_balances
-      GROUP BY account_name
-    ) cb2 ON cb1.account_name = cb2.account_name AND cb1.date = cb2.max_date
-  `).all() as CashBalance[]
+      SELECT cash_account_id, MAX(year * 100 + month) as max_period
+      FROM monthly_cash_balances
+      GROUP BY cash_account_id
+    ) latest ON mcb.cash_account_id = latest.cash_account_id
+      AND (mcb.year * 100 + mcb.month) = latest.max_period
+  `).all() as { cash_account_id: number; balance: number; year: number; month: number }[]
 
   const totalCash = latestBalances.reduce((sum, b) => sum + b.balance, 0)
 
-  // Get yearly expenses
-  const expenses = db.prepare(`
-    SELECT * FROM yearly_expenses
-    ORDER BY year DESC
-    LIMIT 3
-  `).all() as YearlyExpense[]
+  // Calculate monthly expense average from credit card spending
+  const spendingData = db.prepare(`
+    SELECT year, month, SUM(amount) as total
+    FROM credit_card_spending
+    GROUP BY year, month
+    ORDER BY year DESC, month DESC
+  `).all() as { year: number; month: number; total: number }[]
 
-  if (expenses.length === 0) {
+  if (spendingData.length === 0) {
     return [
       { months: 1, amount: 0, coverage: 0 },
       { months: 3, amount: 0, coverage: 0 },
@@ -96,9 +101,8 @@ export function getExpenseCoverage(): { months: number; amount: number; coverage
     ]
   }
 
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.total_amount, 0)
-  const monthCount = expenses.length * 12
-  const monthlyAverage = totalExpenses / monthCount
+  const totalSpending = spendingData.reduce((sum, s) => sum + s.total, 0)
+  const monthlyAverage = totalSpending / spendingData.length
 
   return [
     { months: 1, amount: monthlyAverage, coverage: totalCash / monthlyAverage },
@@ -137,19 +141,19 @@ export function getIncomeMetrics(): IncomeMetrics {
   // Expected monthly income = average net pay * paychecks per month
   const expectedMonthlyIncome = averageNetPay * paychecksPerMonth
 
-  // Get monthly expense average for comparison
-  const expenses = db
+  // Get monthly expense average from credit card spending
+  const spendingData = db
     .prepare(
-      `SELECT * FROM yearly_expenses
-       ORDER BY year DESC
-       LIMIT 3`
+      `SELECT year, month, SUM(amount) as total
+       FROM credit_card_spending
+       GROUP BY year, month`
     )
-    .all() as YearlyExpense[]
+    .all() as { year: number; month: number; total: number }[]
 
   let monthlyExpenseAverage = 0
-  if (expenses.length > 0) {
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.total_amount, 0)
-    monthlyExpenseAverage = totalExpenses / (expenses.length * 12)
+  if (spendingData.length > 0) {
+    const totalSpending = spendingData.reduce((sum, s) => sum + s.total, 0)
+    monthlyExpenseAverage = totalSpending / spendingData.length
   }
 
   // Income vs expenses ratio

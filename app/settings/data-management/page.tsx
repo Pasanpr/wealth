@@ -28,7 +28,6 @@ type SectionKey =
   | 'income'
   | 'credit_cards'
   | 'cash'
-  | 'expenses'
 
 export default function DataManagementPage() {
   const [sections, setSections] = useState<Record<SectionKey, Section> | null>(null)

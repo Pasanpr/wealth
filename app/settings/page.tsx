@@ -11,7 +11,7 @@ import {
   Input,
   Label,
 } from '@/components/ui'
-import { Save, Settings2, AlertTriangle } from 'lucide-react'
+import { Save, Settings2, AlertTriangle, FileText } from 'lucide-react'
 import Link from 'next/link'
 
 interface Settings {
@@ -160,6 +160,18 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium">Tax Profile</span>
                   <p className="text-xs text-muted-foreground">
                     Set up income and tax rates for RSU calculations
+                  </p>
+                </div>
+              </Link>
+              <Link
+                href="/settings/w2"
+                className="flex items-center rounded-md border p-3 hover:bg-accent"
+              >
+                <FileText className="mr-3 h-4 w-4" />
+                <div>
+                  <span className="text-sm font-medium">W-2 Forms</span>
+                  <p className="text-xs text-muted-foreground">
+                    Enter W-2 wage and tax statements for tax allocation
                   </p>
                 </div>
               </Link>

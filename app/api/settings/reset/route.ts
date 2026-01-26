@@ -7,7 +7,6 @@ type ResetSection =
   | 'income'
   | 'credit_cards'
   | 'cash'
-  | 'expenses'
 
 interface ResetRequest {
   sections: ResetSection[]
@@ -45,11 +44,6 @@ const SECTIONS: Record<ResetSection, SectionInfo> = {
     name: 'Cash Accounts & Balances',
     tables: ['monthly_cash_balances', 'cash_accounts', 'cash_balances'],
     description: 'Cash accounts and monthly balance history',
-  },
-  expenses: {
-    name: 'Expenses',
-    tables: ['yearly_expenses'],
-    description: 'Yearly expense totals',
   },
 }
 

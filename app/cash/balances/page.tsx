@@ -23,7 +23,7 @@ import {
 } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils/format'
 import { CashAccount } from '@/lib/types'
-import { Plus, Save, Star, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Save, Star, X } from 'lucide-react'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -65,6 +65,7 @@ export default function CashBalancesPage() {
   const [accountDialogOpen, setAccountDialogOpen] = useState(false)
   const [entryDialogOpen, setEntryDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [showFullHistory, setShowFullHistory] = useState(false)
 
   const [newAccount, setNewAccount] = useState({ name: '', account_type: 'checking', institution: '' })
 
@@ -215,137 +216,208 @@ export default function CashBalancesPage() {
             No cash accounts defined. Click &quot;Add Account&quot; to get started.
           </CardContent>
         </Card>
-      ) : yearsWithData.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No balance data yet. Click &quot;Enter Balances&quot; to add monthly balances.
-          </CardContent>
-        </Card>
       ) : (
         <div className="space-y-6">
-          {/* Accounts with default settings */}
+          {/* Accounts with current balances */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Accounts</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                Set a default account to consolidate all imported data of that type into one account.
+                Set a default account per type. Generic &quot;Checking&quot; data imports to your default checking, &quot;Savings&quot; to your default savings.
               </p>
-              <div className="flex flex-wrap gap-2">
-                {data.accounts.map(account => (
-                  <div
-                    key={account.id}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border ${
-                      account.is_default
-                        ? 'bg-primary/10 border-primary text-primary'
-                        : 'bg-muted border-border'
-                    }`}
-                  >
-                    <span>{account.name}</span>
-                    <span className="text-xs text-muted-foreground">({account.account_type})</span>
-                    {account.is_default ? (
-                      <Star className="h-3.5 w-3.5 fill-current" />
-                    ) : (
-                      <button
-                        onClick={() => handleSetDefault(account.id)}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Set as default for this account type"
-                      >
-                        <Star className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDeleteAccount(account.id, account.name)}
-                      className="text-muted-foreground hover:text-destructive ml-1"
-                      title="Delete account"
+              <div className="space-y-2">
+                {data.accounts.map(account => {
+                  // Find the most recent balance for this account
+                  // Years are already sorted newest first from the API
+                  let currentBalance = 0
+                  let balanceDate = ''
+                  for (const yearData of data.years) {
+                    for (let m = 11; m >= 0; m--) {
+                      const monthData = yearData.months[m]
+                      const ab = monthData?.accountBalances.find(a => a.accountId === account.id)
+                      if (ab && ab.balance > 0) {
+                        currentBalance = ab.balance
+                        balanceDate = `${MONTHS[m]} ${yearData.year}`
+                        break
+                      }
+                    }
+                    if (currentBalance > 0) break
+                  }
+
+                  return (
+                    <div
+                      key={account.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        account.is_default
+                          ? 'bg-primary/10 border-primary'
+                          : 'bg-muted/50 border-border'
+                      }`}
                     >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{account.name}</span>
+                            <span className="text-xs text-muted-foreground">({account.account_type})</span>
+                            {account.is_default && (
+                              <Star className="h-3.5 w-3.5 fill-primary text-primary" />
+                            )}
+                          </div>
+                          {balanceDate && (
+                            <span className="text-xs text-muted-foreground">as of {balanceDate}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`font-mono font-medium ${currentBalance > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          {currentBalance > 0 ? formatCurrency(currentBalance) : '-'}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {!account.is_default && (
+                            <button
+                              onClick={() => handleSetDefault(account.id)}
+                              className="p-1 text-muted-foreground hover:text-foreground rounded"
+                              title="Set as default for this account type"
+                            >
+                              <Star className="h-4 w-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteAccount(account.id, account.name)}
+                            className="p-1 text-muted-foreground hover:text-destructive rounded"
+                            title="Delete account"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Total row */}
+                {data.accounts.length > 1 && (() => {
+                  let total = 0
+                  for (const account of data.accounts) {
+                    for (const yearData of data.years) {
+                      let found = false
+                      for (let m = 11; m >= 0; m--) {
+                        const monthData = yearData.months[m]
+                        const ab = monthData?.accountBalances.find(a => a.accountId === account.id)
+                        if (ab && ab.balance > 0) {
+                          total += ab.balance
+                          found = true
+                          break
+                        }
+                      }
+                      if (found) break
+                    }
+                  }
+                  return total > 0 ? (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted border-2 border-border">
+                      <span className="font-bold">Total Cash</span>
+                      <span className="font-mono font-bold">{formatCurrency(total)}</span>
+                    </div>
+                  ) : null
+                })()}
               </div>
             </CardContent>
           </Card>
 
-          {yearsWithData.map(yearData => (
-            <Card key={yearData.year}>
-              <CardHeader className="pb-3">
-                <CardTitle>{yearData.year}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b bg-muted">
-                        <th className={`p-2 text-left font-medium min-w-[140px] ${stickyCellClass}`}></th>
-                        {MONTHS.map(month => (
-                          <th key={month} className="p-2 text-right font-medium min-w-[90px]">
-                            {month}
-                          </th>
-                        ))}
-                        <th className="p-2 text-right font-medium min-w-[100px] border-l-2">Avg</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.accounts.map(account => {
-                        const monthsWithData = yearData.months.filter(m => {
-                          const ab = m.accountBalances.find(a => a.accountId === account.id)
-                          return ab && ab.balance > 0
-                        })
-                        const avgBalance = monthsWithData.length > 0
-                          ? monthsWithData.reduce((sum, m) => {
-                              const ab = m.accountBalances.find(a => a.accountId === account.id)
-                              return sum + (ab?.balance || 0)
-                            }, 0) / monthsWithData.length
-                          : 0
+          {yearsWithData.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                No balance data yet. Click &quot;Enter Balances&quot; to add monthly balances.
+              </CardContent>
+            </Card>
+          ) : (() => {
+            // Build flat list of recent months with data (newest first)
+            const recentMonths: { year: number; month: number; label: string; accountBalances: { accountId: number; balance: number }[]; totalCash: number }[] = []
+            for (const yearData of yearsWithData) {
+              for (let m = 11; m >= 0; m--) {
+                const monthData = yearData.months[m]
+                if (monthData && monthData.totalCash > 0) {
+                  recentMonths.push({
+                    year: yearData.year,
+                    month: m + 1,
+                    label: `${MONTHS[m]} ${yearData.year}`,
+                    accountBalances: monthData.accountBalances,
+                    totalCash: monthData.totalCash
+                  })
+                }
+              }
+            }
 
-                        return (
+            const displayMonths = showFullHistory ? recentMonths : recentMonths.slice(0, 6)
+
+            return (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Balance History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b bg-muted">
+                          <th className={`p-2 text-left font-medium min-w-[140px] ${stickyCellClass}`}></th>
+                          {displayMonths.map(m => (
+                            <th key={`${m.year}-${m.month}`} className="p-2 text-right font-medium min-w-[100px]">
+                              {m.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.accounts.map(account => (
                           <tr key={account.id} className="border-b">
                             <td className={`p-2 font-medium ${stickyCellClass}`}>{account.name}</td>
-                            {yearData.months.map((month, idx) => {
-                              const ab = month.accountBalances.find(a => a.accountId === account.id)
+                            {displayMonths.map(m => {
+                              const ab = m.accountBalances.find(a => a.accountId === account.id)
                               return (
-                                <td key={idx} className="p-2 text-right">
+                                <td key={`${m.year}-${m.month}`} className="p-2 text-right">
                                   {ab && ab.balance > 0
                                     ? formatCurrency(ab.balance)
                                     : <span className="text-muted-foreground">-</span>}
                                 </td>
                               )
                             })}
-                            <td className="p-2 text-right font-medium border-l-2">
-                              {avgBalance > 0 ? formatCurrency(avgBalance) : <span className="text-muted-foreground">-</span>}
-                            </td>
                           </tr>
-                        )
-                      })}
-
-                      {/* Total row */}
-                      <tr className="border-t-2 bg-muted">
-                        <td className={`p-2 font-bold ${stickyCellClass}`}>Total</td>
-                        {yearData.months.map((month, idx) => (
-                          <td key={idx} className="p-2 text-right font-bold">
-                            {month.totalCash > 0
-                              ? formatCurrency(month.totalCash)
-                              : <span className="text-muted-foreground">-</span>}
-                          </td>
                         ))}
-                        <td className="p-2 text-right font-bold border-l-2">
-                          {(() => {
-                            const monthsWithData = yearData.months.filter(m => m.totalCash > 0)
-                            const avg = monthsWithData.length > 0
-                              ? monthsWithData.reduce((sum, m) => sum + m.totalCash, 0) / monthsWithData.length
-                              : 0
-                            return avg > 0 ? formatCurrency(avg) : <span className="text-muted-foreground">-</span>
-                          })()}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                        <tr className="border-t-2 bg-muted">
+                          <td className={`p-2 font-bold ${stickyCellClass}`}>Total</td>
+                          {displayMonths.map(m => (
+                            <td key={`${m.year}-${m.month}`} className="p-2 text-right font-bold">
+                              {formatCurrency(m.totalCash)}
+                            </td>
+                          ))}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {recentMonths.length > 6 && (
+                    <button
+                      onClick={() => setShowFullHistory(!showFullHistory)}
+                      className="mt-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                    >
+                      {showFullHistory ? (
+                        <>
+                          <ChevronUp className="h-4 w-4" />
+                          Show less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4" />
+                          Show all {recentMonths.length} months
+                        </>
+                      )}
+                    </button>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })()}
         </div>
       )}
 

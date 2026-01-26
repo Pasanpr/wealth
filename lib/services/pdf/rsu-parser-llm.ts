@@ -76,7 +76,7 @@ const extractRsuTransactionsTool: Anthropic.Tool = {
             },
             costBasis: {
               type: 'number',
-              description: 'Adjusted cost basis - the FMV at vest time (Adjusted Cost Basis column if available, otherwise Cost Basis)',
+              description: 'REQUIRED: The cost basis from the "Adjusted Cost Basis" or "Cost Basis" column. This is the FMV at vest time × shares. Must be a positive number for every transaction - never 0 or empty. Look carefully at each table row.',
             },
             capitalGainLoss: {
               type: 'number',
@@ -110,41 +110,55 @@ DOCUMENT TYPES:
 1. Stock Plan Transactions Supplement - Detailed breakdown of RSU sales with cost basis
 2. 1099-B - IRS form showing proceeds from sales
 
-CRITICAL: Extract ALL transactions shown. These documents may have multiple pages.
+CRITICAL REQUIREMENTS:
+- Extract ALL transactions shown across ALL pages
+- EVERY transaction MUST have a non-zero costBasis value
+- If you see a table with multiple rows, extract EACH row as a separate transaction
 
 DATE FORMAT: Always convert dates to YYYY-MM-DD format.
 - Input: 01/15/2024 → Output: 2024-01-15
 - Input: 1/5/2024 → Output: 2024-01-05
 
 TRANSACTION COLUMNS (Stock Plan Supplement):
-The document typically shows:
-- Symbol (usually INTU for Intuit)
-- Qty (number of shares)
-- Date Acquired (vest date)
-- Date Sold (sale date)
-- Proceeds (gross sale proceeds)
-- Cost Basis (original cost)
-- Adjustment (wash sale adjustment if any)
-- Adjusted Cost Basis (use this as costBasis)
-- Gain/Loss (capital gain or loss)
-- Term (Short/Long)
-- Covered status
-- Grant Type (RSU)
-- Grant Number
+The document typically shows these columns in a table:
+| Symbol | Qty | Date Acquired | Date Sold | Proceeds | Cost Basis | Adj | Adj Cost Basis | Gain/Loss | Term | Covered | Type | Grant# |
+
+Column meanings:
+- Qty = number of shares sold (extract as "shares")
+- Date Acquired = vest date when shares were received
+- Date Sold = sale date
+- Proceeds = gross sale proceeds (extract as "grossProceeds")
+- Cost Basis or Adjusted Cost Basis = FMV at vest × shares (extract as "costBasis")
+- Gain/Loss = capital gain or loss (extract as "capitalGainLoss")
+- Grant# = grant identifier like B17868 (extract as "grantId")
+
+COST BASIS IS CRITICAL:
+- The "Cost Basis" or "Adjusted Cost Basis" column shows the tax basis (FMV at vest × shares)
+- This value is REQUIRED for every transaction - it should NEVER be 0 or empty
+- Look carefully at each row in the table - the cost basis is typically a dollar amount similar in magnitude to the proceeds
+- For RSUs, cost basis represents what the shares were worth when they vested
+
+EXAMPLE: A row might show:
+INTU | 7.000 | 01/01/2024 | 01/04/2024 | $4,375.80 | $4,268.95 | $0 | $4,268.95 | $106.85 | Short | Covered | RSU | B17868
+
+From this extract:
+- shares: 7.0
+- vestDate: 2024-01-01
+- saleDate: 2024-01-04
+- grossProceeds: 4375.80
+- costBasis: 4268.95 (use Adjusted Cost Basis if available, otherwise Cost Basis)
+- capitalGainLoss: 106.85
+- grantId: B17868
 
 IMPORTANT NOTES:
-1. Each row represents a separate sale transaction
-2. Multiple rows may have the same vest date if shares from the same vest were sold separately
-3. Wash sale rows are marked with "WS" or have a non-zero adjustment
-4. Gains are positive, losses are shown in parentheses or with minus sign
-5. Grant IDs often appear at the end of each row (like B17868)
-6. The document may span multiple pages - extract all transactions
+1. Each row in the table is a separate transaction - extract ALL rows
+2. Multiple rows may have the same vest date (different grants vesting same day)
+3. Wash sale rows marked "WS" have adjustment values
+4. Losses shown in parentheses or with minus sign are negative
+5. The document may span multiple pages - look at ALL pages
+6. Do NOT skip any rows - every transaction row must be extracted
 
-CALCULATING PRICES:
-- vestPrice = costBasis / shares (FMV at vest)
-- salePrice = grossProceeds / shares
-
-Extract every transaction row showing INTU stock sales.`
+Extract every transaction row showing stock sales.`
 
 /**
  * Parse E*Trade RSU document (Supplement or 1099-B) using Claude LLM
@@ -376,7 +390,18 @@ export function consolidateTransactions(transactions: ParsedRsuTransaction[]): P
 
 /**
  * Merge transactions from multiple document sources (1099-B and Supplement)
- * Intelligently combines data, preferring Supplement for cost basis details
+ *
+ * IMPORTANT: When Supplement is available, use it exclusively.
+ * The Stock Plan Transactions Supplement has:
+ * - Accurate share counts
+ * - Proper cost basis (adjusted for RSU income)
+ * - Grant IDs for each transaction
+ *
+ * The 1099-B often has issues with share parsing and shows $0 cost basis
+ * (since brokers report cost basis differently for RSUs).
+ *
+ * We do NOT deduplicate by date because multiple grants can vest/sell
+ * on the same day with the same amounts.
  */
 export function mergeDocumentTransactions(
   documents: ParsedRsuDocument[]
@@ -393,48 +418,19 @@ export function mergeDocumentTransactions(
     }
   }
 
-  // If only one type, just return all consolidated
-  if (supplementTxs.length === 0) {
-    return consolidateTransactions(otherTxs)
-  }
-  if (otherTxs.length === 0) {
-    return consolidateTransactions(supplementTxs)
-  }
-
-  // Build lookup from supplement transactions (preferred source for cost basis)
-  const supplementByKey = new Map<string, ParsedRsuTransaction[]>()
-  for (const tx of supplementTxs) {
-    const key = `${tx.vestDate}-${tx.saleDate}`
-    if (!supplementByKey.has(key)) {
-      supplementByKey.set(key, [])
-    }
-    supplementByKey.get(key)!.push(tx)
+  // If Supplement data is available, use it exclusively
+  // Supplement has accurate cost basis, shares, and grant IDs
+  if (supplementTxs.length > 0) {
+    // Return all supplement transactions without consolidation
+    // Multiple grants can have the same vest/sale dates
+    return supplementTxs.sort((a, b) =>
+      new Date(a.vestDate).getTime() - new Date(b.vestDate).getTime()
+    )
   }
 
-  // Track which supplement transactions have been matched
-  const matchedSupplementKeys = new Set<string>()
-  const mergedTransactions: ParsedRsuTransaction[] = []
-
-  // For each 1099-B transaction, try to find matching supplement data
-  for (const tx of otherTxs) {
-    const key = `${tx.vestDate}-${tx.saleDate}`
-    const supplementMatches = supplementByKey.get(key)
-
-    if (supplementMatches && supplementMatches.length > 0) {
-      // Found matching supplement data - use it (it has better cost basis info)
-      matchedSupplementKeys.add(key)
-      // Skip the 1099-B transaction, we'll use the supplement data
-    } else {
-      // No supplement match - use 1099-B data as-is
-      mergedTransactions.push(tx)
-    }
-  }
-
-  // Add all supplement transactions (they have the complete data)
-  for (const tx of supplementTxs) {
-    mergedTransactions.push(tx)
-  }
-
-  // Consolidate to handle any remaining duplicates
-  return consolidateTransactions(mergedTransactions)
+  // Fallback to 1099-B data only if no Supplement available
+  // Note: 1099-B may have parsing issues (share counts, $0 cost basis)
+  return otherTxs.sort((a, b) =>
+    new Date(a.vestDate).getTime() - new Date(b.vestDate).getTime()
+  )
 }

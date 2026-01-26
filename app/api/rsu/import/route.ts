@@ -121,25 +121,30 @@ async function handleFileUpload(request: NextRequest) {
 
   // Check if we have multiple document types (1099-B and Supplement)
   const documentTypes = new Set(parsedFiles.map(p => p.data.documentType))
-  const hasMultipleTypes = documentTypes.size > 1 &&
-    (documentTypes.has('supplement') || documentTypes.has('1099b'))
+  const hasSupplement = documentTypes.has('supplement')
+  const has1099B = documentTypes.has('1099b')
+  const hasMultipleTypes = documentTypes.size > 1 && (hasSupplement || has1099B)
 
-  // Use smart merge if we have both document types, otherwise simple consolidation
+  // Track if we ignored 1099-B in favor of Supplement
+  const ignored1099B = hasMultipleTypes && hasSupplement && has1099B
+
+  // Use smart merge if we have both document types, otherwise return all transactions
+  // NOTE: We do NOT consolidate by date because multiple grants can vest/sell same day
   let consolidatedTransactions: ParsedRsuTransaction[]
 
   if (hasMultipleTypes && consolidate) {
-    // Smart merge: prioritize Supplement data for cost basis accuracy
+    // Smart merge: uses Supplement exclusively when available
     consolidatedTransactions = mergeDocumentTransactions(parsedFiles.map(p => p.data))
-  } else if (consolidate) {
-    // Simple consolidation
+  } else {
+    // Single document type or no consolidation - return all transactions sorted
     const allTransactions: ParsedRsuTransaction[] = []
     for (const parsed of parsedFiles) {
       allTransactions.push(...parsed.data.transactions)
     }
-    consolidatedTransactions = consolidateTransactions(allTransactions)
-  } else {
-    // No consolidation
-    consolidatedTransactions = parsedFiles.flatMap(p => p.data.transactions)
+    // Sort by vest date without consolidating (multiple grants can have same dates)
+    consolidatedTransactions = allTransactions.sort((a, b) =>
+      new Date(a.vestDate).getTime() - new Date(b.vestDate).getTime()
+    )
   }
 
   // If preview only, return parsed data without saving
@@ -147,7 +152,8 @@ async function handleFileUpload(request: NextRequest) {
     return NextResponse.json({
       preview: true,
       results,
-      mergedDocuments: hasMultipleTypes, // Indicates smart merge was used
+      mergedDocuments: hasMultipleTypes,
+      ignored1099B, // True when 1099-B was ignored in favor of Supplement
       documentTypes: Array.from(documentTypes),
       files: parsedFiles.map(p => ({
         filename: p.filename,

@@ -19,8 +19,8 @@ import {
   TableRow,
 } from '@/components/ui'
 import { formatCurrency, formatDate, formatShares } from '@/lib/utils/format'
-import { RsuW2Data } from '@/lib/types'
-import { ArrowLeft, Upload, FileText, Calculator, Check, AlertCircle, Loader2, X, Copy, CheckCheck, ChevronDown, ChevronRight, Bug } from 'lucide-react'
+import { W2Form } from '@/lib/types'
+import { ArrowLeft, Upload, FileText, Calculator, Check, AlertCircle, Loader2, X, Copy, CheckCheck, ChevronDown, ChevronRight, Bug, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 interface ParsedTransaction {
@@ -76,23 +76,14 @@ export default function RsuImportPage() {
   const [showDebug, setShowDebug] = useState(false)
   const [copiedRaw, setCopiedRaw] = useState(false)
   const [mergedDocuments, setMergedDocuments] = useState(false)
+  const [ignored1099B, setIgnored1099B] = useState(false)
 
   // Import state
   const [importing, setImporting] = useState(false)
   const [importSuccess, setImportSuccess] = useState<number | null>(null)
 
-  // W-2 data state
-  const [w2Data, setW2Data] = useState<RsuW2Data[]>([])
-  const [w2Form, setW2Form] = useState({
-    year: new Date().getFullYear(),
-    total_rsu_income: '',
-    federal_withheld: '',
-    state_withheld: '',
-    social_security_withheld: '',
-    medicare_withheld: '',
-    notes: '',
-  })
-  const [savingW2, setSavingW2] = useState(false)
+  // W-2 data state (using new W2Form type)
+  const [w2Data, setW2Data] = useState<W2Form[]>([])
 
   // Manual entry state
   const [manualForm, setManualForm] = useState({
@@ -115,9 +106,9 @@ export default function RsuImportPage() {
 
   const fetchW2Data = async () => {
     try {
-      const res = await fetch('/api/rsu/w2')
+      const res = await fetch('/api/w2')
       const data = await res.json()
-      setW2Data(data)
+      setW2Data(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Failed to fetch W-2 data:', error)
     }
@@ -192,6 +183,8 @@ export default function RsuImportPage() {
         }
         // Track if smart merge was used
         setMergedDocuments(data.mergedDocuments || false)
+        // Track if 1099-B was ignored in favor of Supplement
+        setIgnored1099B(data.ignored1099B || false)
       } else {
         setParseError('No RSU transactions found in the uploaded files')
       }
@@ -216,32 +209,78 @@ export default function RsuImportPage() {
   }
 
   const allocateW2Taxes = () => {
-    const years = [...new Set(parsedTransactions.map(tx => new Date(tx.vestDate).getFullYear()))]
-    if (years.length !== 1) {
-      alert('Tax allocation works best when all records are from the same year')
+    // Helper to get year from date string (YYYY-MM-DD) without timezone issues
+    const getYearFromDateString = (dateStr: string): number => {
+      // Parse YYYY-MM-DD directly to avoid timezone conversion issues
+      const match = dateStr.match(/^(\d{4})-/)
+      if (match) return parseInt(match[1], 10)
+      // Fallback to Date parsing if format doesn't match
+      return new Date(dateStr).getFullYear()
+    }
+
+    // First, check which years we need W-2 data for
+    const years = [...new Set(parsedTransactions.map(tx => getYearFromDateString(tx.vestDate)))]
+    const missingYears = years.filter(year => !w2Data.find(w => w.year === year))
+
+    if (missingYears.length > 0) {
+      alert(`No W-2 data found for: ${missingYears.join(', ')}. Add W-2 data in Settings > W-2 Forms first.\n\nTaxes withheld for RSUs relate to the vest year, not sale year.`)
       return
     }
 
-    const yearW2 = w2Data.find(w => w.year === years[0])
-    if (!yearW2) {
-      alert(`No W-2 data found for ${years[0]}. Add W-2 data first.`)
-      return
+    console.log('=== Tax Allocation Debug ===')
+    console.log('Total transactions:', parsedTransactions.length)
+
+    // Helper to get effective cost basis - use costBasis if available, otherwise calculate from shares × vestPrice
+    const getEffectiveCostBasis = (tx: ParsedTransaction): number => {
+      const directCostBasis = Number(tx.costBasis) || 0
+      if (directCostBasis > 0) return directCostBasis
+      // Fallback: calculate from shares × vestPrice (FMV at vest)
+      const calculated = (Number(tx.shares) || 0) * (Number(tx.vestPrice) || 0)
+      return calculated
     }
 
-    const totalCostBasis = parsedTransactions.reduce((sum, tx) => sum + tx.costBasis, 0)
-    const totalTax = yearW2.federal_withheld + yearW2.state_withheld
+    // Build a map of year -> total cost basis for that year
+    const yearTotals: Record<number, number> = {}
+    for (const tx of parsedTransactions) {
+      const year = getYearFromDateString(tx.vestDate)
+      const costBasis = getEffectiveCostBasis(tx)
+      yearTotals[year] = (yearTotals[year] || 0) + costBasis
+      console.log(`  Building totals - TX vest=${tx.vestDate}, costBasis=${tx.costBasis}, effectiveCostBasis=${costBasis}, shares=${tx.shares}, vestPrice=${tx.vestPrice}, running total for ${year}=${yearTotals[year]}`)
+    }
 
-    setParsedTransactions(prev =>
-      prev.map(tx => {
-        const proportion = tx.costBasis / totalCostBasis
-        const allocatedTax = Math.round(totalTax * proportion * 100) / 100
-        return {
-          ...tx,
-          taxesWithheld: allocatedTax,
-          netProceeds: tx.grossProceeds - allocatedTax,
-        }
-      })
-    )
+    console.log('Year totals:', JSON.stringify(yearTotals))
+    console.log('W-2 data:', w2Data.map(w => ({ year: w.year, federal: w.federal_income_tax_withheld, state: w.state_income_tax_withheld })))
+
+    // Map transactions with allocated taxes - use direct state update, not functional
+    const updatedTransactions = parsedTransactions.map(tx => {
+      const vestYear = getYearFromDateString(tx.vestDate)
+      const yearW2 = w2Data.find(w => w.year === vestYear)
+
+      if (!yearW2) {
+        console.log(`No W-2 for year ${vestYear}`)
+        return tx
+      }
+
+      // Use effective cost basis (with fallback to shares × vestPrice)
+      const txCostBasis = getEffectiveCostBasis(tx)
+      const yearTotalCostBasis = yearTotals[vestYear] || 0
+      const yearTotalTax = Number(yearW2.federal_income_tax_withheld || 0) + Number(yearW2.state_income_tax_withheld || 0)
+
+      // Proportional allocation based on this transaction's cost basis
+      const proportion = yearTotalCostBasis > 0 ? txCostBasis / yearTotalCostBasis : 0
+      const allocatedTax = Math.round(yearTotalTax * proportion * 100) / 100
+
+      console.log(`TX ${tx.vestDate}: effectiveCostBasis=${txCostBasis}, yearTotal=${yearTotalCostBasis}, proportion=${proportion.toFixed(6)}, yearTax=${yearTotalTax}, allocated=${allocatedTax}`)
+
+      return {
+        ...tx,
+        taxesWithheld: allocatedTax,
+        netProceeds: Number(tx.grossProceeds || 0) - allocatedTax,
+      }
+    })
+
+    console.log('=== End Tax Allocation Debug ===')
+    setParsedTransactions(updatedTransactions)
   }
 
   const importTransactions = async () => {
@@ -280,6 +319,7 @@ export default function RsuImportPage() {
       setParsedTotals(null)
       setParsedFiles([])
       setMergedDocuments(false)
+      setIgnored1099B(false)
       setSelectedFiles([])
       setShowDebug(false)
     } catch (error) {
@@ -287,43 +327,6 @@ export default function RsuImportPage() {
       alert('Failed to import records')
     } finally {
       setImporting(false)
-    }
-  }
-
-  const saveW2Data = async () => {
-    setSavingW2(true)
-    try {
-      const res = await fetch('/api/rsu/w2', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          year: w2Form.year,
-          total_rsu_income: parseFloat(w2Form.total_rsu_income) || 0,
-          federal_withheld: parseFloat(w2Form.federal_withheld) || 0,
-          state_withheld: parseFloat(w2Form.state_withheld) || 0,
-          social_security_withheld: parseFloat(w2Form.social_security_withheld) || 0,
-          medicare_withheld: parseFloat(w2Form.medicare_withheld) || 0,
-          notes: w2Form.notes || null,
-        }),
-      })
-
-      if (!res.ok) throw new Error('Save failed')
-
-      await fetchW2Data()
-      setW2Form({
-        year: new Date().getFullYear(),
-        total_rsu_income: '',
-        federal_withheld: '',
-        state_withheld: '',
-        social_security_withheld: '',
-        medicare_withheld: '',
-        notes: '',
-      })
-    } catch (error) {
-      console.error('Failed to save W-2 data:', error)
-      alert('Failed to save W-2 data')
-    } finally {
-      setSavingW2(false)
     }
   }
 
@@ -529,6 +532,7 @@ export default function RsuImportPage() {
                     setParsedTotals(null)
                     setParsedFiles([])
                     setMergedDocuments(false)
+                    setIgnored1099B(false)
                     setParseError(null)
                     setShowDebug(false)
                   }}
@@ -553,9 +557,9 @@ export default function RsuImportPage() {
                 <CardTitle className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span>Parsed Transactions ({parsedTransactions.filter(tx => tx.selected).length} selected)</span>
-                    {mergedDocuments && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                        Merged
+                    {ignored1099B && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                        Using Supplement Only
                       </span>
                     )}
                   </div>
@@ -658,6 +662,16 @@ export default function RsuImportPage() {
                   </div>
                 </div>
 
+                {/* Info notice when 1099-B was ignored */}
+                {ignored1099B && (
+                  <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-md text-sm">
+                    <strong className="text-amber-800 dark:text-amber-200">Note:</strong>{' '}
+                    <span className="text-amber-700 dark:text-amber-300">
+                      1099-B data was ignored in favor of Stock Plan Supplement. The Supplement has accurate cost basis and grant IDs needed for proper tax reporting.
+                    </span>
+                  </div>
+                )}
+
                 {/* Debug Section */}
                 {parsedFiles.length > 0 && (
                   <div className="mt-4">
@@ -724,121 +738,52 @@ export default function RsuImportPage() {
 
       {/* W-2 Tab */}
       {activeTab === 'w2' && (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Add W-2 RSU Tax Data</CardTitle>
+              <CardTitle>W-2 Tax Data</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                Enter RSU income and tax withholding from your W-2. This is used to estimate taxes for each vest.
+                W-2 data is used to allocate tax withholding to individual RSU transactions.
+                When you have W-2 data for the same year as your RSU transactions, you can use
+                the &quot;Allocate W-2 Taxes&quot; button to proportionally distribute taxes.
               </p>
-              <div className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="w2-year">Tax Year</Label>
-                  <Input
-                    id="w2-year"
-                    type="number"
-                    value={w2Form.year}
-                    onChange={e => setW2Form({ ...w2Form, year: parseInt(e.target.value) })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="w2-income">Total RSU Income (Ordinary Income)</Label>
-                  <Input
-                    id="w2-income"
-                    type="number"
-                    step="0.01"
-                    placeholder="Sum of all vest values for the year"
-                    value={w2Form.total_rsu_income}
-                    onChange={e => setW2Form({ ...w2Form, total_rsu_income: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="w2-federal">Federal Tax Withheld</Label>
-                    <Input
-                      id="w2-federal"
-                      type="number"
-                      step="0.01"
-                      value={w2Form.federal_withheld}
-                      onChange={e => setW2Form({ ...w2Form, federal_withheld: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="w2-state">State Tax Withheld</Label>
-                    <Input
-                      id="w2-state"
-                      type="number"
-                      step="0.01"
-                      value={w2Form.state_withheld}
-                      onChange={e => setW2Form({ ...w2Form, state_withheld: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="w2-ss">Social Security Withheld</Label>
-                    <Input
-                      id="w2-ss"
-                      type="number"
-                      step="0.01"
-                      value={w2Form.social_security_withheld}
-                      onChange={e => setW2Form({ ...w2Form, social_security_withheld: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="w2-medicare">Medicare Withheld</Label>
-                    <Input
-                      id="w2-medicare"
-                      type="number"
-                      step="0.01"
-                      value={w2Form.medicare_withheld}
-                      onChange={e => setW2Form({ ...w2Form, medicare_withheld: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="w2-notes">Notes</Label>
-                  <Input
-                    id="w2-notes"
-                    value={w2Form.notes}
-                    onChange={e => setW2Form({ ...w2Form, notes: e.target.value })}
-                    placeholder="Optional notes"
-                  />
-                </div>
-                <Button onClick={saveW2Data} disabled={savingW2 || !w2Form.total_rsu_income}>
-                  {savingW2 ? 'Saving...' : 'Save W-2 Data'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Saved W-2 Data</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {w2Data.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No W-2 data saved yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {w2Data.map(w2 => (
-                    <div key={w2.id} className="p-4 border rounded-lg">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-semibold">Tax Year {w2.year}</h4>
-                        <span className="text-sm text-muted-foreground">
-                          {((w2.federal_withheld + w2.state_withheld) / w2.total_rsu_income * 100).toFixed(1)}% effective rate
-                        </span>
+              <Link href="/settings/w2">
+                <Button>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Manage W-2 Forms
+                </Button>
+              </Link>
+
+              {w2Data.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="font-medium mb-3">Available W-2 Data</h4>
+                  <div className="space-y-3">
+                    {w2Data.map(w2 => (
+                      <div key={w2.id} className="p-4 border rounded-lg">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-semibold">{w2.year} - {w2.employer_name}</h4>
+                          <span className="text-sm text-muted-foreground">
+                            {((w2.federal_income_tax_withheld + w2.state_income_tax_withheld) / w2.wages_tips_compensation * 100).toFixed(1)}% effective rate
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>Wages: <strong>{formatCurrency(w2.wages_tips_compensation)}</strong></div>
+                          <div>Federal Tax: <strong>{formatCurrency(w2.federal_income_tax_withheld)}</strong></div>
+                          <div>State Tax: <strong>{formatCurrency(w2.state_income_tax_withheld)}</strong></div>
+                          <div>Total Tax: <strong>{formatCurrency(w2.federal_income_tax_withheld + w2.state_income_tax_withheld)}</strong></div>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div>RSU Income: <strong>{formatCurrency(w2.total_rsu_income)}</strong></div>
-                        <div>Federal: <strong>{formatCurrency(w2.federal_withheld)}</strong></div>
-                        <div>State: <strong>{formatCurrency(w2.state_withheld)}</strong></div>
-                        <div>Total Tax: <strong>{formatCurrency(w2.federal_withheld + w2.state_withheld)}</strong></div>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {w2Data.length === 0 && (
+                <div className="mt-4 p-4 bg-muted rounded-lg text-sm text-muted-foreground">
+                  No W-2 data found. Add your W-2 forms to enable tax allocation for RSU transactions.
                 </div>
               )}
             </CardContent>

@@ -128,7 +128,7 @@ export interface RsuMetrics {
   vestedShares: number // Total vested shares
 }
 
-// RSU W-2 data for tax reconciliation
+// RSU W-2 data for tax reconciliation (legacy - use W2Form instead)
 export interface RsuW2Data {
   id: number
   year: number
@@ -142,14 +142,105 @@ export interface RsuW2Data {
   updated_at: string
 }
 
-// Yearly Expenses
-export interface YearlyExpense {
+// Box 12 item (coded compensation items)
+export interface W2Box12Item {
+  code: string // Common: C, D, DD, E, G, V, W, AA, BB, etc.
+  amount: number
+}
+
+// Box 14 item (other items)
+export interface W2Box14Item {
+  description: string
+  amount: number
+}
+
+// Full W-2 form data
+export interface W2Form {
   id: number
   year: number
-  total_amount: number
+
+  // Employer info
+  employer_name: string
+  employer_ein: string | null
+
+  // Box 1-6: Federal wages and withholding
+  wages_tips_compensation: number         // Box 1
+  federal_income_tax_withheld: number     // Box 2
+  social_security_wages: number           // Box 3
+  social_security_tax_withheld: number    // Box 4
+  medicare_wages: number                  // Box 5
+  medicare_tax_withheld: number           // Box 6
+
+  // Box 7-11: Additional compensation
+  social_security_tips: number            // Box 7
+  allocated_tips: number                  // Box 8
+  dependent_care_benefits: number         // Box 10
+  nonqualified_plans: number              // Box 11
+
+  // Box 12: Coded items
+  box_12_items: W2Box12Item[]
+
+  // Box 13: Checkboxes
+  is_statutory_employee: boolean
+  has_retirement_plan: boolean
+  has_third_party_sick_pay: boolean
+
+  // Box 14: Other items
+  box_14_items: W2Box14Item[]
+
+  // State tax info (Box 15-17)
+  state_code: string | null
+  state_employer_id: string | null
+  state_wages: number
+  state_income_tax_withheld: number
+
+  // Local tax info (Box 18-20)
+  local_wages: number
+  local_income_tax_withheld: number
+  locality_name: string | null
+
+  // Additional state
+  state_code_2: string | null
+  state_employer_id_2: string | null
+  state_wages_2: number
+  state_income_tax_2: number
+
   notes: string | null
   created_at: string
   updated_at: string
+}
+
+// W-2 Box 12 code descriptions
+export const W2_BOX_12_CODES: Record<string, string> = {
+  A: 'Uncollected SS/RRTA tax on tips',
+  B: 'Uncollected Medicare tax on tips',
+  C: 'Taxable group-term life insurance over $50k',
+  D: '401(k) elective deferrals',
+  E: '403(b) elective deferrals',
+  F: '408(k)(6) SEP contributions',
+  G: '457(b) deferred compensation',
+  H: '501(c)(18)(D) tax-exempt contributions',
+  J: 'Nontaxable sick pay',
+  K: '20% excise tax on golden parachutes',
+  L: 'Substantiated employee business expense reimbursements',
+  M: 'Uncollected SS/RRTA tax on group-term life insurance',
+  N: 'Uncollected Medicare tax on group-term life insurance',
+  P: 'Excludable moving expense reimbursements',
+  Q: 'Nontaxable combat pay',
+  R: 'Employer HSA contributions',
+  S: 'SIMPLE contributions',
+  T: 'Adoption benefits',
+  V: 'Income from exercise of nonstatutory stock options (RSU)',
+  W: 'Employer HSA contributions',
+  Y: 'Deferrals under 409A nonqualified deferred compensation',
+  Z: 'Income under 409A nonqualified deferred compensation',
+  AA: 'Roth 401(k) contributions',
+  BB: 'Roth 403(b) contributions',
+  DD: 'Cost of employer-sponsored health coverage',
+  EE: 'Roth contributions under 457(b)',
+  FF: 'Permitted benefits under qualified small employer HRA',
+  GG: 'Income from qualified equity grants under 83(i)',
+  HH: 'Aggregate deferrals under 83(i)',
 }
 
 // Cash Balances (legacy - individual snapshots)

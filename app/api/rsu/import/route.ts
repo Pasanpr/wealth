@@ -4,6 +4,7 @@ import { RsuVesting } from '@/lib/types'
 import {
   parseRsuDocumentWithLlm,
   consolidateTransactions,
+  mergeDocumentTransactions,
   ParsedRsuTransaction,
   ParsedRsuDocument,
 } from '@/lib/services/pdf/rsu-parser-llm'
@@ -118,23 +119,36 @@ async function handleFileUpload(request: NextRequest) {
     console.log(`Processed batch of ${batch.length} files`)
   }
 
-  // Consolidate transactions if requested
-  const allTransactions: Array<ParsedRsuTransaction & { filename: string }> = []
-  for (const parsed of parsedFiles) {
-    for (const tx of parsed.data.transactions) {
-      allTransactions.push({ ...tx, filename: parsed.filename })
-    }
-  }
+  // Check if we have multiple document types (1099-B and Supplement)
+  const documentTypes = new Set(parsedFiles.map(p => p.data.documentType))
+  const hasMultipleTypes = documentTypes.size > 1 &&
+    (documentTypes.has('supplement') || documentTypes.has('1099b'))
 
-  const consolidatedTransactions = consolidate
-    ? consolidateTransactions(allTransactions)
-    : allTransactions
+  // Use smart merge if we have both document types, otherwise simple consolidation
+  let consolidatedTransactions: ParsedRsuTransaction[]
+
+  if (hasMultipleTypes && consolidate) {
+    // Smart merge: prioritize Supplement data for cost basis accuracy
+    consolidatedTransactions = mergeDocumentTransactions(parsedFiles.map(p => p.data))
+  } else if (consolidate) {
+    // Simple consolidation
+    const allTransactions: ParsedRsuTransaction[] = []
+    for (const parsed of parsedFiles) {
+      allTransactions.push(...parsed.data.transactions)
+    }
+    consolidatedTransactions = consolidateTransactions(allTransactions)
+  } else {
+    // No consolidation
+    consolidatedTransactions = parsedFiles.flatMap(p => p.data.transactions)
+  }
 
   // If preview only, return parsed data without saving
   if (previewOnly) {
     return NextResponse.json({
       preview: true,
       results,
+      mergedDocuments: hasMultipleTypes, // Indicates smart merge was used
+      documentTypes: Array.from(documentTypes),
       files: parsedFiles.map(p => ({
         filename: p.filename,
         documentType: p.data.documentType,

@@ -75,6 +75,7 @@ export default function RsuImportPage() {
   const [parsedFiles, setParsedFiles] = useState<ParsedFileInfo[]>([])
   const [showDebug, setShowDebug] = useState(false)
   const [copiedRaw, setCopiedRaw] = useState(false)
+  const [mergedDocuments, setMergedDocuments] = useState(false)
 
   // Import state
   const [importing, setImporting] = useState(false)
@@ -189,6 +190,8 @@ export default function RsuImportPage() {
         if (data.files) {
           setParsedFiles(data.files)
         }
+        // Track if smart merge was used
+        setMergedDocuments(data.mergedDocuments || false)
       } else {
         setParseError('No RSU transactions found in the uploaded files')
       }
@@ -276,6 +279,7 @@ export default function RsuImportPage() {
       setParsedTransactions([])
       setParsedTotals(null)
       setParsedFiles([])
+      setMergedDocuments(false)
       setSelectedFiles([])
       setShowDebug(false)
     } catch (error) {
@@ -524,6 +528,7 @@ export default function RsuImportPage() {
                     setParsedTransactions([])
                     setParsedTotals(null)
                     setParsedFiles([])
+                    setMergedDocuments(false)
                     setParseError(null)
                     setShowDebug(false)
                   }}
@@ -546,7 +551,14 @@ export default function RsuImportPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>Parsed Transactions ({parsedTransactions.filter(tx => tx.selected).length} selected)</span>
+                  <div className="flex items-center gap-2">
+                    <span>Parsed Transactions ({parsedTransactions.filter(tx => tx.selected).length} selected)</span>
+                    {mergedDocuments && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        Merged
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     {w2Data.length > 0 && (
                       <Button variant="outline" size="sm" onClick={allocateW2Taxes}>

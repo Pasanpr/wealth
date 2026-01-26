@@ -373,3 +373,68 @@ export function consolidateTransactions(transactions: ParsedRsuTransaction[]): P
     }
   }).sort((a, b) => new Date(a.vestDate).getTime() - new Date(b.vestDate).getTime())
 }
+
+/**
+ * Merge transactions from multiple document sources (1099-B and Supplement)
+ * Intelligently combines data, preferring Supplement for cost basis details
+ */
+export function mergeDocumentTransactions(
+  documents: ParsedRsuDocument[]
+): ParsedRsuTransaction[] {
+  // Separate by document type
+  const supplementTxs: ParsedRsuTransaction[] = []
+  const otherTxs: ParsedRsuTransaction[] = []
+
+  for (const doc of documents) {
+    if (doc.documentType === 'supplement') {
+      supplementTxs.push(...doc.transactions)
+    } else {
+      otherTxs.push(...doc.transactions)
+    }
+  }
+
+  // If only one type, just return all consolidated
+  if (supplementTxs.length === 0) {
+    return consolidateTransactions(otherTxs)
+  }
+  if (otherTxs.length === 0) {
+    return consolidateTransactions(supplementTxs)
+  }
+
+  // Build lookup from supplement transactions (preferred source for cost basis)
+  const supplementByKey = new Map<string, ParsedRsuTransaction[]>()
+  for (const tx of supplementTxs) {
+    const key = `${tx.vestDate}-${tx.saleDate}`
+    if (!supplementByKey.has(key)) {
+      supplementByKey.set(key, [])
+    }
+    supplementByKey.get(key)!.push(tx)
+  }
+
+  // Track which supplement transactions have been matched
+  const matchedSupplementKeys = new Set<string>()
+  const mergedTransactions: ParsedRsuTransaction[] = []
+
+  // For each 1099-B transaction, try to find matching supplement data
+  for (const tx of otherTxs) {
+    const key = `${tx.vestDate}-${tx.saleDate}`
+    const supplementMatches = supplementByKey.get(key)
+
+    if (supplementMatches && supplementMatches.length > 0) {
+      // Found matching supplement data - use it (it has better cost basis info)
+      matchedSupplementKeys.add(key)
+      // Skip the 1099-B transaction, we'll use the supplement data
+    } else {
+      // No supplement match - use 1099-B data as-is
+      mergedTransactions.push(tx)
+    }
+  }
+
+  // Add all supplement transactions (they have the complete data)
+  for (const tx of supplementTxs) {
+    mergedTransactions.push(tx)
+  }
+
+  // Consolidate to handle any remaining duplicates
+  return consolidateTransactions(mergedTransactions)
+}

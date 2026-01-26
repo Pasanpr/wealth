@@ -20,7 +20,8 @@ import {
 } from '@/components/ui'
 import { formatCurrency, formatDate, formatShares } from '@/lib/utils/format'
 import { W2Form } from '@/lib/types'
-import { ArrowLeft, Upload, FileText, Calculator, Check, AlertCircle, Loader2, X, Copy, CheckCheck, ChevronDown, ChevronRight, Bug, ExternalLink } from 'lucide-react'
+import { ETradeGrant, UpcomingVest, CompletedVest, ParsedETradeData } from '@/lib/services/csv/etrade-benefits-parser'
+import { ArrowLeft, Upload, FileText, Calculator, Check, AlertCircle, Loader2, X, Copy, CheckCheck, ChevronDown, ChevronRight, Bug, ExternalLink, FileSpreadsheet } from 'lucide-react'
 import Link from 'next/link'
 
 interface ParsedTransaction {
@@ -54,7 +55,7 @@ interface ParsedFileInfo {
   rawText?: string
 }
 
-type TabType = 'upload' | 'w2' | 'manual'
+type TabType = 'upload' | 'etrade-csv' | 'w2' | 'manual'
 
 export default function RsuImportPage() {
   const router = useRouter()
@@ -84,6 +85,15 @@ export default function RsuImportPage() {
 
   // W-2 data state (using new W2Form type)
   const [w2Data, setW2Data] = useState<W2Form[]>([])
+
+  // E*Trade CSV state
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [csvParsing, setCsvParsing] = useState(false)
+  const [csvError, setCsvError] = useState<string | null>(null)
+  const [csvPreview, setCsvPreview] = useState<ParsedETradeData | null>(null)
+  const [csvImporting, setCsvImporting] = useState(false)
+  const [csvImportSuccess, setCsvImportSuccess] = useState<number | null>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
 
   // Manual entry state
   const [manualForm, setManualForm] = useState({
@@ -400,6 +410,109 @@ export default function RsuImportPage() {
     setManualForm(updated)
   }
 
+  // E*Trade CSV handlers
+  const handleCsvSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setCsvFile(file)
+      setCsvError(null)
+      setCsvPreview(null)
+      setCsvImportSuccess(null)
+    }
+  }
+
+  const handleCsvDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const file = Array.from(e.dataTransfer.files).find(f =>
+      f.name.toLowerCase().endsWith('.csv')
+    )
+    if (file) {
+      setCsvFile(file)
+      setCsvError(null)
+      setCsvPreview(null)
+      setCsvImportSuccess(null)
+    }
+  }, [])
+
+  const parseCsvFile = async () => {
+    if (!csvFile) return
+
+    setCsvParsing(true)
+    setCsvError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', csvFile)
+      formData.append('previewOnly', 'true')
+
+      const res = await fetch('/api/rsu/import-csv', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Failed to parse CSV')
+      }
+
+      setCsvPreview({
+        grants: data.grants,
+        vestSchedules: [],
+        upcomingVests: data.upcomingVests,
+        completedVests: data.completedVests,
+      })
+    } catch (error) {
+      console.error('CSV parse error:', error)
+      setCsvError(error instanceof Error ? error.message : 'Failed to parse CSV')
+    } finally {
+      setCsvParsing(false)
+    }
+  }
+
+  const importCsvData = async () => {
+    if (!csvFile || !csvPreview) return
+
+    setCsvImporting(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', csvFile)
+      formData.append('previewOnly', 'false')
+      formData.append('currentPrice', '0') // Will be fetched from live price on RSU page
+
+      const res = await fetch('/api/rsu/import-csv', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Failed to import CSV')
+      }
+
+      setCsvImportSuccess(data.count)
+      setCsvFile(null)
+      setCsvPreview(null)
+    } catch (error) {
+      console.error('CSV import error:', error)
+      alert(error instanceof Error ? error.message : 'Failed to import CSV')
+    } finally {
+      setCsvImporting(false)
+    }
+  }
+
+  const clearCsv = () => {
+    setCsvFile(null)
+    setCsvPreview(null)
+    setCsvError(null)
+    setCsvImportSuccess(null)
+    if (csvInputRef.current) {
+      csvInputRef.current.value = ''
+    }
+  }
+
   return (
     <PageContainer
       title="Import RSU Data"
@@ -431,6 +544,13 @@ export default function RsuImportPage() {
         >
           <FileText className="mr-2 h-4 w-4" />
           Upload PDF
+        </Button>
+        <Button
+          variant={activeTab === 'etrade-csv' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('etrade-csv')}
+        >
+          <FileSpreadsheet className="mr-2 h-4 w-4" />
+          E*Trade CSV
         </Button>
         <Button
           variant={activeTab === 'w2' ? 'default' : 'outline'}
@@ -730,6 +850,199 @@ export default function RsuImportPage() {
                     )}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* E*Trade CSV Tab */}
+      {activeTab === 'etrade-csv' && (
+        <div className="space-y-6">
+          {csvImportSuccess && (
+            <div className="p-4 bg-green-100 dark:bg-green-900 rounded-lg flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-600" />
+              <span>Successfully imported {csvImportSuccess} upcoming vests!</span>
+              <Button variant="outline" size="sm" onClick={() => router.push('/cash/rsu')}>
+                View Records
+              </Button>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Import E*Trade Benefits CSV</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Upload your E*Trade Stock Plan Benefits CSV export (ByBenefitType_expanded.csv).
+                This will import your upcoming vest schedule to track projected income.
+              </p>
+
+              {/* Drop zone */}
+              <div
+                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onDrop={handleCsvDrop}
+                onDragOver={handleDragOver}
+                onClick={() => csvInputRef.current?.click()}
+              >
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCsvSelect}
+                  className="hidden"
+                />
+                <FileSpreadsheet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Drop CSV file here or click to browse</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Export from E*Trade: Stock Plan &gt; Holdings &gt; Benefit Type &gt; Expanded View &gt; Export
+                </p>
+              </div>
+
+              {/* Selected file */}
+              {csvFile && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      <span className="text-sm">{csvFile.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({(csvFile.size / 1024).toFixed(1)} KB)
+                      </span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={clearCsv}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <Button
+                  onClick={parseCsvFile}
+                  disabled={!csvFile || csvParsing}
+                >
+                  {csvParsing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Parsing...
+                    </>
+                  ) : (
+                    'Preview Data'
+                  )}
+                </Button>
+                <Button variant="outline" onClick={clearCsv}>
+                  Clear
+                </Button>
+              </div>
+
+              {csvError && (
+                <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 rounded-md flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <span className="text-sm">{csvError}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Preview Data */}
+          {csvPreview && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Preview: {csvPreview.upcomingVests.length} Upcoming Vests</span>
+                  <Button
+                    onClick={importCsvData}
+                    disabled={csvImporting || csvPreview.upcomingVests.length === 0}
+                  >
+                    {csvImporting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Importing...
+                      </>
+                    ) : (
+                      'Import Upcoming Vests'
+                    )}
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold">{csvPreview.grants.length}</div>
+                    <div className="text-sm text-muted-foreground">Active Grants</div>
+                  </div>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold">{csvPreview.upcomingVests.reduce((sum, v) => sum + v.shares, 0)}</div>
+                    <div className="text-sm text-muted-foreground">Unvested Shares</div>
+                  </div>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <div className="text-2xl font-bold">{csvPreview.completedVests.reduce((sum, v) => sum + v.shares, 0)}</div>
+                    <div className="text-sm text-muted-foreground">Already Vested</div>
+                  </div>
+                </div>
+
+                {/* Grants List */}
+                <div className="mb-6">
+                  <h4 className="font-medium mb-3">Grants</h4>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Grant ID</TableHead>
+                          <TableHead>Grant Date</TableHead>
+                          <TableHead>Reason</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead className="text-right">Vested</TableHead>
+                          <TableHead className="text-right">Unvested</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {csvPreview.grants.map((grant, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono text-sm">{grant.grantId}</TableCell>
+                            <TableCell>{formatDate(grant.grantDate)}</TableCell>
+                            <TableCell>{grant.grantReason}</TableCell>
+                            <TableCell className="text-right">{formatShares(grant.grantedQty)}</TableCell>
+                            <TableCell className="text-right">{formatShares(grant.vestedQty)}</TableCell>
+                            <TableCell className="text-right">{formatShares(grant.unvestedQty)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Upcoming Vests */}
+                <div>
+                  <h4 className="font-medium mb-3">Upcoming Vests (to be imported)</h4>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Vest Date</TableHead>
+                          <TableHead>Grant ID</TableHead>
+                          <TableHead>Grant Date</TableHead>
+                          <TableHead className="text-right">Shares</TableHead>
+                          <TableHead>Reason</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {csvPreview.upcomingVests.map((vest, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>{formatDate(vest.vestDate)}</TableCell>
+                            <TableCell className="font-mono text-sm">{vest.grantId}</TableCell>
+                            <TableCell>{formatDate(vest.grantDate)}</TableCell>
+                            <TableCell className="text-right">{formatShares(vest.shares)}</TableCell>
+                            <TableCell>{vest.grantReason}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}

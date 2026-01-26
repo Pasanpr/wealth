@@ -148,6 +148,14 @@ function parseAccounts(text: string, debug: boolean = false): Vanguard529Account
   // Pattern: "529 Plan Account\nOwner: ...\nBeneficiary: ..."
   const accountSections = text.split(/529\s*Plan\s*Account/i).slice(1)
 
+  if (debug) {
+    console.log(`=== FOUND ${accountSections.length} ACCOUNT SECTIONS ===`)
+    accountSections.forEach((section, i) => {
+      console.log(`--- Section ${i + 1} (first 300 chars) ---`)
+      console.log(section.substring(0, 300))
+    })
+  }
+
   for (const section of accountSections) {
     // Extract beneficiary name
     const beneficiaryMatch = section.match(/Beneficiary[:\s]+([A-Za-z]+\s+[A-Za-z]+\s+[A-Za-z]+)/i)
@@ -218,7 +226,21 @@ function parseAccounts(text: string, debug: boolean = false): Vanguard529Account
     accounts.push(account)
   }
 
-  return accounts
+  // Deduplicate by account number (continuation pages have same beneficiary header)
+  const uniqueAccounts = new Map<string, Vanguard529Account>()
+  for (const account of accounts) {
+    const key = account.accountNumber || account.beneficiaryName
+    // Keep the first occurrence (which has the full investment summary)
+    if (!uniqueAccounts.has(key)) {
+      uniqueAccounts.set(key, account)
+    }
+  }
+
+  if (debug && uniqueAccounts.size !== accounts.length) {
+    console.log(`=== DEDUPLICATED: ${accounts.length} -> ${uniqueAccounts.size} accounts ===`)
+  }
+
+  return Array.from(uniqueAccounts.values())
 }
 
 /**

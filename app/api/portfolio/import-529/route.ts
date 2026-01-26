@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const parseResult = await parseVanguard529Pdf(buffer, false)
+    const debugMode = formData.get('debug') === 'true'
+    const parseResult = await parseVanguard529Pdf(buffer, debugMode)
 
     if (!parseResult.success || !parseResult.data) {
       return NextResponse.json(
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
           contributionCount: parsed.contributions.length,
           totalContributions: parsed.contributions.reduce((sum, c) => sum + c.amount, 0),
         },
+        rawText: debugMode ? parseResult.rawText : undefined,
       })
     }
 

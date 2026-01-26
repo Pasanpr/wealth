@@ -102,6 +102,7 @@ interface Preview529 {
     contributionCount: number
     totalContributions: number
   }
+  rawText?: string
 }
 
 interface ImportResult {
@@ -142,7 +143,8 @@ export default function PortfolioImportPage() {
   const [importHoldings529, setImportHoldings529] = useState(true)
   const [importContributions529, setImportContributions529] = useState(true)
   const [isDragOver529, setIsDragOver529] = useState(false)
-  const [active529Tab, setActive529Tab] = useState<'accounts' | 'contributions'>('accounts')
+  const [active529Tab, setActive529Tab] = useState<'accounts' | 'contributions' | 'debug'>('accounts')
+  const [debug529, setDebug529] = useState(false)
 
   // Vanguard CSV handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,7 +288,7 @@ export default function PortfolioImportPage() {
     }
   }, [])
 
-  const parseFile529 = async (fileToparse: File) => {
+  const parseFile529 = async (fileToparse: File, debug: boolean = false) => {
     setLoading529(true)
     setError529(null)
 
@@ -294,6 +296,7 @@ export default function PortfolioImportPage() {
       const formData = new FormData()
       formData.append('file', fileToparse)
       formData.append('previewOnly', 'true')
+      formData.append('debug', debug.toString())
 
       const response = await fetch('/api/portfolio/import-529', {
         method: 'POST',
@@ -867,6 +870,17 @@ export default function PortfolioImportPage() {
                 >
                   Contributions ({preview529.contributions.length})
                 </Button>
+                <Button
+                  variant={active529Tab === 'debug' ? 'default' : 'outline'}
+                  onClick={() => {
+                    setActive529Tab('debug')
+                    if (!preview529.rawText && file529) {
+                      parseFile529(file529, true)
+                    }
+                  }}
+                >
+                  Debug
+                </Button>
               </div>
 
               {/* Accounts Table */}
@@ -948,6 +962,28 @@ export default function PortfolioImportPage() {
                           </TableBody>
                         </Table>
                       </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Debug Panel */}
+              {active529Tab === 'debug' && (
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle>Raw PDF Text</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loading529 ? (
+                      <p className="text-muted-foreground text-center py-8">Loading debug data...</p>
+                    ) : preview529.rawText ? (
+                      <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto max-h-96 whitespace-pre-wrap">
+                        {preview529.rawText}
+                      </pre>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-8">
+                        Click the Debug tab again to load raw PDF text
+                      </p>
                     )}
                   </CardContent>
                 </Card>

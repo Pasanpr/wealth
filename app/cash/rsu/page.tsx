@@ -309,7 +309,7 @@ export default function RsuPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Projected Income</CardTitle>
-            {livePrice && livePrice.change !== undefined && livePrice.change >= 0 ? (
+            {livePrice && typeof livePrice.change === 'number' && livePrice.change >= 0 ? (
               <TrendingUp className="h-4 w-4 text-green-600" />
             ) : (
               <TrendingDown className="h-4 w-4 text-red-600" />
@@ -329,7 +329,7 @@ export default function RsuPage() {
                 ) : livePrice ? (
                   <>
                     <span className="text-xs font-semibold">${livePrice.price.toFixed(2)}</span>
-                    {livePrice.changePercent !== undefined && (
+                    {typeof livePrice.changePercent === 'number' && (
                       <span className={`text-xs ${livePrice.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         ({livePrice.changePercent >= 0 ? '+' : ''}{livePrice.changePercent.toFixed(2)}%)
                       </span>

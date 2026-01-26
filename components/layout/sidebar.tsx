@@ -77,6 +77,7 @@ const navItems: NavItem[] = [
       { title: 'Allocation', href: '/portfolio/allocation' },
       { title: 'Returns', href: '/portfolio/returns' },
       { title: 'RSU Advisor', href: '/portfolio/rsu-advisor' },
+      { title: 'Import', href: '/portfolio/import' },
     ],
   },
   {

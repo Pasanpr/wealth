@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Import holdings
+    // Import holdings (upsert - update if exists, insert if not)
     if (importHoldings && parsed.holdings.length > 0) {
       const holdingRecords = holdingsToDbRecords(
         parsed.holdings,
@@ -128,6 +128,14 @@ export async function POST(request: NextRequest) {
         holdingsDate
       )
 
+      const findExisting = db.prepare(`
+        SELECT id FROM holdings WHERE account_id = ? AND security_id = ? AND date = ?
+      `)
+
+      const updateHolding = db.prepare(`
+        UPDATE holdings SET value = ?, shares = ?, cost_basis = ? WHERE id = ?
+      `)
+
       const insertHolding = db.prepare(`
         INSERT INTO holdings (account_id, security_id, date, value, shares, cost_basis)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -135,14 +143,20 @@ export async function POST(request: NextRequest) {
 
       for (const record of holdingRecords) {
         try {
-          insertHolding.run(
-            record.account_id,
-            record.security_id,
-            record.date,
-            record.value,
-            record.shares,
-            record.cost_basis
-          )
+          const existing = findExisting.get(record.account_id, record.security_id, record.date) as { id: number } | undefined
+
+          if (existing) {
+            updateHolding.run(record.value, record.shares, record.cost_basis, existing.id)
+          } else {
+            insertHolding.run(
+              record.account_id,
+              record.security_id,
+              record.date,
+              record.value,
+              record.shares,
+              record.cost_basis
+            )
+          }
           results.holdingsImported++
         } catch (error) {
           results.errors.push(`Failed to import holding: ${error instanceof Error ? error.message : 'Unknown error'}`)

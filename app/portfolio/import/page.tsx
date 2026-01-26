@@ -338,7 +338,8 @@ export default function PortfolioImportPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to import PDF')
+        const errorMsg = data.message || data.error || 'Failed to import PDF'
+        throw new Error(errorMsg)
       }
 
       setImportResult529(data)

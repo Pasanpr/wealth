@@ -139,8 +139,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Import holdings
+    // Import holdings (upsert - update if exists, insert if not)
     if (importHoldings) {
+      const findExisting = db.prepare(`
+        SELECT id FROM holdings WHERE account_id = ? AND security_id = ? AND date = ?
+      `)
+
+      const updateHolding = db.prepare(`
+        UPDATE holdings SET value = ?, shares = ?, cost_basis = ? WHERE id = ?
+      `)
+
       const insertHolding = db.prepare(`
         INSERT INTO holdings (account_id, security_id, date, value, shares, cost_basis)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -160,14 +168,20 @@ export async function POST(request: NextRequest) {
               securityId
             )
 
-            insertHolding.run(
-              holding.account_id,
-              holding.security_id,
-              holding.date,
-              holding.value,
-              holding.shares,
-              holding.cost_basis
-            )
+            const existing = findExisting.get(holding.account_id, holding.security_id, holding.date) as { id: number } | undefined
+
+            if (existing) {
+              updateHolding.run(holding.value, holding.shares, holding.cost_basis, existing.id)
+            } else {
+              insertHolding.run(
+                holding.account_id,
+                holding.security_id,
+                holding.date,
+                holding.value,
+                holding.shares,
+                holding.cost_basis
+              )
+            }
             results.holdingsImported++
           } catch (error) {
             results.errors.push(
@@ -227,8 +241,11 @@ export async function POST(request: NextRequest) {
     }, { status: 201 })
   } catch (error) {
     console.error('Failed to import 529 statement:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error('Error details:', { message: errorMessage, stack: errorStack })
     return NextResponse.json(
-      { error: 'Failed to import PDF', message: error instanceof Error ? error.message : 'Unknown error' },
+      { error: errorMessage, stack: errorStack },
       { status: 500 }
     )
   }

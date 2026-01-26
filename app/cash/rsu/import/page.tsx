@@ -20,7 +20,7 @@ import {
 } from '@/components/ui'
 import { formatCurrency, formatDate, formatShares } from '@/lib/utils/format'
 import { RsuW2Data } from '@/lib/types'
-import { ArrowLeft, Upload, FileText, Calculator, Check, AlertCircle, Loader2, X } from 'lucide-react'
+import { ArrowLeft, Upload, FileText, Calculator, Check, AlertCircle, Loader2, X, Copy, CheckCheck, ChevronDown, ChevronRight, Bug } from 'lucide-react'
 import Link from 'next/link'
 
 interface ParsedTransaction {
@@ -38,6 +38,20 @@ interface ParsedTransaction {
   selected: boolean
   taxesWithheld: number | null
   netProceeds: number | null
+}
+
+interface ParsedFileInfo {
+  filename: string
+  documentType: string
+  taxYear: number | null
+  transactionCount: number
+  totals: {
+    totalShares: number
+    totalProceeds: number
+    totalCostBasis: number
+    totalGainLoss: number
+  }
+  rawText?: string
 }
 
 type TabType = 'upload' | 'w2' | 'manual'
@@ -58,6 +72,9 @@ export default function RsuImportPage() {
     totalCostBasis: number
     totalGainLoss: number
   } | null>(null)
+  const [parsedFiles, setParsedFiles] = useState<ParsedFileInfo[]>([])
+  const [showDebug, setShowDebug] = useState(false)
+  const [copiedRaw, setCopiedRaw] = useState(false)
 
   // Import state
   const [importing, setImporting] = useState(false)
@@ -168,6 +185,10 @@ export default function RsuImportPage() {
           }))
         )
         setParsedTotals(data.totals)
+        // Store file info for debugging
+        if (data.files) {
+          setParsedFiles(data.files)
+        }
       } else {
         setParseError('No RSU transactions found in the uploaded files')
       }
@@ -254,7 +275,9 @@ export default function RsuImportPage() {
       setImportSuccess(data.count)
       setParsedTransactions([])
       setParsedTotals(null)
+      setParsedFiles([])
       setSelectedFiles([])
+      setShowDebug(false)
     } catch (error) {
       console.error('Import failed:', error)
       alert('Failed to import records')
@@ -500,7 +523,9 @@ export default function RsuImportPage() {
                     setSelectedFiles([])
                     setParsedTransactions([])
                     setParsedTotals(null)
+                    setParsedFiles([])
                     setParseError(null)
+                    setShowDebug(false)
                   }}
                 >
                   Clear
@@ -620,6 +645,65 @@ export default function RsuImportPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Debug Section */}
+                {parsedFiles.length > 0 && (
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setShowDebug(!showDebug)}
+                      className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {showDebug ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <Bug className="h-4 w-4" />
+                      Debug: View LLM Extracted Data
+                    </button>
+
+                    {showDebug && (
+                      <div className="mt-3 space-y-3">
+                        {parsedFiles.map((file, index) => (
+                          <div key={index} className="border rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <span className="font-medium text-sm">{file.filename}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({file.documentType}, {file.transactionCount} transactions)
+                                </span>
+                              </div>
+                              {file.rawText && (
+                                <button
+                                  onClick={async () => {
+                                    await navigator.clipboard.writeText(file.rawText!)
+                                    setCopiedRaw(true)
+                                    setTimeout(() => setCopiedRaw(false), 2000)
+                                  }}
+                                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  {copiedRaw ? (
+                                    <>
+                                      <CheckCheck className="h-3 w-3 text-green-500" />
+                                      <span className="text-green-500">Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3" />
+                                      <span>Copy JSON</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            {file.rawText && (
+                              <pre className="p-2 bg-muted rounded text-xs overflow-x-auto whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                                {file.rawText}
+                              </pre>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

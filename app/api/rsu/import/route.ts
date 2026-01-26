@@ -141,6 +141,7 @@ async function handleFileUpload(request: NextRequest) {
         taxYear: p.data.taxYear,
         transactionCount: p.data.transactions.length,
         totals: p.data.totals,
+        rawText: p.rawText, // Include raw LLM output for debugging
       })),
       transactions: consolidatedTransactions,
       totals: {

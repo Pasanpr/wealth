@@ -25,6 +25,9 @@ interface Section {
 type SectionKey =
   | 'pay_statements'
   | 'portfolio'
+  | 'holdings'
+  | 'securities'
+  | 'investment_accounts'
   | 'income'
   | 'credit_cards'
   | 'cash'

@@ -4,6 +4,9 @@ import { getDb } from '@/lib/db'
 type ResetSection =
   | 'pay_statements'
   | 'portfolio'
+  | 'holdings'
+  | 'securities'
+  | 'investment_accounts'
   | 'income'
   | 'credit_cards'
   | 'cash'
@@ -25,10 +28,25 @@ const SECTIONS: Record<ResetSection, SectionInfo> = {
     tables: ['pay_statement_deposits', 'pay_statement_items', 'pay_statements'],
     description: 'All imported pay statements and their line items',
   },
-  portfolio: {
-    name: 'Portfolio',
+  holdings: {
+    name: 'Holdings Only',
+    tables: ['holdings'],
+    description: 'Investment holdings (keeps accounts and securities)',
+  },
+  securities: {
+    name: 'Securities',
+    tables: ['securities'],
+    description: 'Security definitions (stocks, funds, etc.)',
+  },
+  investment_accounts: {
+    name: 'Investment Accounts',
     tables: ['holdings', 'cash_flows', 'portfolio_snapshots', 'accounts'],
-    description: 'Investment accounts, holdings, and cash flows',
+    description: 'Investment accounts and all related data',
+  },
+  portfolio: {
+    name: 'All Portfolio Data',
+    tables: ['holdings', 'cash_flows', 'portfolio_snapshots', 'accounts', 'securities'],
+    description: 'Everything: accounts, holdings, securities, and cash flows',
   },
   income: {
     name: 'Income & RSU',

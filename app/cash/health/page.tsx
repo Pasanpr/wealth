@@ -8,13 +8,6 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  Input,
-  Label,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
   Table,
   TableBody,
   TableCell,
@@ -22,9 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui'
-import { formatCurrency, formatNumber, formatDate } from '@/lib/utils/format'
-import { CashBalance } from '@/lib/types'
-import { Plus, Trash2, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react'
+import { formatCurrency, formatNumber } from '@/lib/utils/format'
+import { CashAccount } from '@/lib/types'
+import { AlertCircle, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 
 interface CashHealthData {
   health: {
@@ -37,28 +31,55 @@ interface CashHealthData {
   coverage: { months: number; amount: number; coverage: number }[]
 }
 
+interface AccountWithLatestBalance {
+  account: CashAccount
+  latestBalance: number
+  latestPeriod: { year: number; month: number } | null
+}
+
 export default function CashHealthPage() {
   const [healthData, setHealthData] = useState<CashHealthData | null>(null)
-  const [balances, setBalances] = useState<CashBalance[]>([])
+  const [accountBalances, setAccountBalances] = useState<AccountWithLatestBalance[]>([])
   const [loading, setLoading] = useState(true)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    balance: '',
-    account_name: '',
-    notes: '',
-  })
 
   const fetchData = async () => {
     try {
-      const [healthRes, balancesRes] = await Promise.all([
+      const [healthRes, cashRes] = await Promise.all([
         fetch('/api/cash-health'),
-        fetch('/api/cash-balances'),
+        fetch('/api/monthly-cash'),
       ])
       const health = await healthRes.json()
-      const balanceData = await balancesRes.json()
+      const cashData = await cashRes.json()
+
       setHealthData(health)
-      setBalances(balanceData)
+
+      // Extract latest balance for each account
+      if (cashData.accounts && cashData.years) {
+        const latestBalances: AccountWithLatestBalance[] = cashData.accounts.map((account: CashAccount) => {
+          // Find the latest balance for this account across all years
+          let latestBalance = 0
+          let latestPeriod: { year: number; month: number } | null = null
+
+          for (const yearData of cashData.years) {
+            for (const monthData of yearData.months) {
+              const accountBalance = monthData.accountBalances.find(
+                (b: { accountId: number; balance: number }) => b.accountId === account.id
+              )
+              if (accountBalance && accountBalance.balance > 0) {
+                if (!latestPeriod || yearData.year > latestPeriod.year ||
+                    (yearData.year === latestPeriod.year && monthData.month > latestPeriod.month)) {
+                  latestBalance = accountBalance.balance
+                  latestPeriod = { year: yearData.year, month: monthData.month }
+                }
+              }
+            }
+          }
+
+          return { account, latestBalance, latestPeriod }
+        })
+
+        setAccountBalances(latestBalances.filter((ab: AccountWithLatestBalance) => ab.latestBalance > 0))
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error)
     } finally {
@@ -70,32 +91,10 @@ export default function CashHealthPage() {
     fetchData()
   }, [])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    const payload = {
-      ...formData,
-      balance: parseFloat(formData.balance),
-    }
-
-    try {
-      await fetch('/api/cash-balances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      setDialogOpen(false)
-      setFormData({
-        date: new Date().toISOString().split('T')[0],
-        balance: '',
-        account_name: '',
-        notes: '',
-      })
-      fetchData()
-    } catch (error) {
-      console.error('Failed to save balance:', error)
-    }
+  const formatPeriod = (period: { year: number; month: number } | null) => {
+    if (!period) return '--'
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    return `${monthNames[period.month - 1]} ${period.year}`
   }
 
   const getStatusIcon = (status: string) => {
@@ -124,31 +123,17 @@ export default function CashHealthPage() {
     }
   }
 
-  // Group balances by account
-  const accountBalances = balances.reduce((acc, balance) => {
-    if (!acc[balance.account_name]) {
-      acc[balance.account_name] = []
-    }
-    acc[balance.account_name].push(balance)
-    return acc
-  }, {} as Record<string, CashBalance[]>)
-
-  // Get latest balance per account
-  const latestByAccount = Object.entries(accountBalances).map(([name, records]) => ({
-    name,
-    balance: records[0].balance,
-    date: records[0].date,
-  }))
-
   return (
     <PageContainer
       title="Cash Health Analysis"
       description="Monitor your cash reserves and expense coverage"
       actions={
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Balance
-        </Button>
+        <Link href="/cash/balances">
+          <Button variant="outline">
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Manage Balances
+          </Button>
+        </Link>
       }
     >
       {loading ? (
@@ -257,9 +242,12 @@ export default function CashHealthPage() {
               <CardTitle>Cash Accounts</CardTitle>
             </CardHeader>
             <CardContent>
-              {latestByAccount.length === 0 ? (
+              {accountBalances.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No cash balances recorded yet. Click &quot;Add Balance&quot; to get started.
+                  No cash balances recorded yet.{' '}
+                  <Link href="/cash/balances" className="text-primary hover:underline">
+                    Add balances in Cash Balances
+                  </Link>
                 </div>
               ) : (
                 <Table>
@@ -271,17 +259,17 @@ export default function CashHealthPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {latestByAccount.map(account => (
-                      <TableRow key={account.name}>
+                    {accountBalances.map(({ account, latestBalance, latestPeriod }) => (
+                      <TableRow key={account.id}>
                         <TableCell className="font-medium">{account.name}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(account.balance)}</TableCell>
-                        <TableCell>{formatDate(account.date)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(latestBalance)}</TableCell>
+                        <TableCell>{formatPeriod(latestPeriod)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
                       <TableCell className="font-bold">Total</TableCell>
                       <TableCell className="text-right font-bold">
-                        {formatCurrency(latestByAccount.reduce((sum, a) => sum + a.balance, 0))}
+                        {formatCurrency(accountBalances.reduce((sum, a) => sum + a.latestBalance, 0))}
                       </TableCell>
                       <TableCell></TableCell>
                     </TableRow>
@@ -292,63 +280,6 @@ export default function CashHealthPage() {
           </Card>
         </>
       )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Cash Balance</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="account_name">Account Name</Label>
-                <Input
-                  id="account_name"
-                  placeholder="e.g., Checking, Savings, Emergency Fund"
-                  value={formData.account_name}
-                  onChange={e => setFormData({ ...formData, account_name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="balance">Balance</Label>
-                <Input
-                  id="balance"
-                  type="number"
-                  step="0.01"
-                  value={formData.balance}
-                  onChange={e => setFormData({ ...formData, balance: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="notes">Notes (Optional)</Label>
-                <Input
-                  id="notes"
-                  value={formData.notes}
-                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">Save</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </PageContainer>
   )
 }

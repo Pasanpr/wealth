@@ -24,8 +24,19 @@ import {
 } from '@/components/ui'
 import { formatCurrency, formatDate, formatShares, formatPercent } from '@/lib/utils/format'
 import { RsuVesting, RsuMetrics } from '@/lib/types'
-import { Plus, Pencil, Trash2, DollarSign, Percent, TrendingUp, PiggyBank, Clock, CheckCircle, Upload } from 'lucide-react'
+import { Plus, Pencil, Trash2, DollarSign, Percent, TrendingUp, PiggyBank, Clock, CheckCircle, Upload, RefreshCw, TrendingDown } from 'lucide-react'
 import Link from 'next/link'
+
+interface StockPriceData {
+  symbol: string
+  price: number
+  previousClose?: number
+  change?: number
+  changePercent?: number
+  cached?: boolean
+  fetchedAt?: string
+  error?: string
+}
 
 interface RsuData {
   metrics: RsuMetrics
@@ -40,6 +51,8 @@ export default function RsuPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<RsuVesting | null>(null)
   const [stockPrice, setStockPrice] = useState('')
+  const [livePrice, setLivePrice] = useState<StockPriceData | null>(null)
+  const [priceLoading, setPriceLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'vested' | 'pending'>('vested')
   const [formData, setFormData] = useState({
     // Grant info
@@ -82,8 +95,28 @@ export default function RsuPage() {
     }
   }
 
+  const fetchStockPrice = async () => {
+    setPriceLoading(true)
+    try {
+      const res = await fetch('/api/stock-price?symbol=INTU')
+      const data = await res.json()
+      if (data.error) {
+        setLivePrice({ symbol: 'INTU', price: 0, error: data.message })
+      } else {
+        setLivePrice(data)
+        // Auto-set the stock price for calculations
+        setStockPrice(data.price.toFixed(2))
+      }
+    } catch (error) {
+      console.error('Failed to fetch stock price:', error)
+      setLivePrice({ symbol: 'INTU', price: 0, error: 'Failed to fetch' })
+    } finally {
+      setPriceLoading(false)
+    }
+  }
+
   useEffect(() => {
-    Promise.all([fetchRecords(), fetchMetrics()]).finally(() => setLoading(false))
+    Promise.all([fetchRecords(), fetchMetrics(), fetchStockPrice()]).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -276,24 +309,49 @@ export default function RsuPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Projected Income</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            {livePrice && livePrice.change !== undefined && livePrice.change >= 0 ? (
+              <TrendingUp className="h-4 w-4 text-green-600" />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-red-600" />
+            )}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {metrics?.projectedIncome ? formatCurrency(metrics.projectedIncome) : '--'}
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <Input
-                type="number"
-                placeholder="Stock price"
-                value={stockPrice}
-                onChange={e => setStockPrice(e.target.value)}
-                className="h-7 w-24 text-xs"
-              />
-              <span className="text-xs text-muted-foreground">
-                {metrics ? formatShares(metrics.pendingShares) : '--'} pending
-              </span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-medium">INTU:</span>
+                {priceLoading ? (
+                  <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+                ) : livePrice?.error ? (
+                  <span className="text-xs text-destructive">Error</span>
+                ) : livePrice ? (
+                  <>
+                    <span className="text-xs font-semibold">${livePrice.price.toFixed(2)}</span>
+                    {livePrice.changePercent !== undefined && (
+                      <span className={`text-xs ${livePrice.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ({livePrice.changePercent >= 0 ? '+' : ''}{livePrice.changePercent.toFixed(2)}%)
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-muted-foreground">--</span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={fetchStockPrice}
+                  disabled={priceLoading}
+                >
+                  <RefreshCw className={`h-3 w-3 ${priceLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {metrics ? formatShares(metrics.pendingShares) : '--'} pending shares
+            </p>
           </CardContent>
         </Card>
 

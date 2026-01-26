@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { PageContainer } from '@/components/layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { formatCurrency, formatPercent } from '@/lib/utils/format'
-import { PieChart, Briefcase, TrendingUp, BarChart3 } from 'lucide-react'
+import { PieChart, Briefcase, TrendingUp, BarChart3, Upload } from 'lucide-react'
 import Link from 'next/link'
 import {
   PieChart as RechartsPie,
@@ -149,6 +149,13 @@ export default function PortfolioOverview() {
                   >
                     <TrendingUp className="mr-3 h-4 w-4" />
                     <span className="text-sm">Return Analysis</span>
+                  </Link>
+                  <Link
+                    href="/portfolio/import"
+                    className="flex items-center rounded-md border p-3 hover:bg-accent"
+                  >
+                    <Upload className="mr-3 h-4 w-4" />
+                    <span className="text-sm">Import Vanguard CSV</span>
                   </Link>
                 </div>
               </CardContent>

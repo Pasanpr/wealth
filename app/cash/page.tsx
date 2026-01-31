@@ -19,6 +19,7 @@ import {
   TableRow,
   LearnMore,
   TermTooltip,
+  CompactMetrics,
 } from '@/components/ui'
 import { formatCurrency, formatNumber } from '@/lib/utils/format'
 import {
@@ -177,90 +178,118 @@ export default function CashDashboard() {
         <div className="text-muted-foreground">Loading...</div>
       ) : (
         <>
-          {/* Status Banner */}
-          <Card className="mb-6">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                {data && getStatusIcon(data.health.status)}
-                <div className="flex-1">
-                  <h3 className="text-xl font-semibold capitalize mb-1">
-                    {data?.health.status || 'Unknown'} Status
-                  </h3>
-                  <p className="text-muted-foreground">
-                    {data && getStatusMessage(
-                      data.health.status,
-                      data.health.monthsCovered,
-                      data.health.targetMonths
-                    )}
+          {/* Simple Mode: Compact Metrics */}
+          {!isAdvanced && data && (
+            <CompactMetrics
+              className="mb-6"
+              metrics={[
+                {
+                  label: 'total cash',
+                  value: formatCurrency(data.health.totalCash),
+                },
+                {
+                  label: '/mo expenses',
+                  value: formatCurrency(data.health.monthlyExpenseAverage),
+                },
+                {
+                  label: 'months covered',
+                  value: formatNumber(data.health.monthsCovered, 1),
+                  subtext: `target: ${data.health.targetMonths}`,
+                },
+              ]}
+              status={data.health.status}
+              progressValue={(data.health.monthsCovered / data.health.targetMonths) * 100}
+            />
+          )}
+
+          {/* Advanced Mode: Status Banner */}
+          {isAdvanced && (
+            <Card className="mb-6">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  {data && getStatusIcon(data.health.status)}
+                  <div className="flex-1">
+                    <h3 className="text-xl font-semibold capitalize mb-1">
+                      {data?.health.status || 'Unknown'} Status
+                    </h3>
+                    <p className="text-muted-foreground">
+                      {data && getStatusMessage(
+                        data.health.status,
+                        data.health.monthsCovered,
+                        data.health.targetMonths
+                      )}
+                    </p>
+                  </div>
+                  <Link
+                    href="/cash/accounts"
+                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                  >
+                    Manage Accounts
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Advanced Mode: Key Metrics Cards */}
+          {isAdvanced && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Cash</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {data?.health.totalCash ? formatCurrency(data.health.totalCash) : '--'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Across all accounts</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Monthly Expenses</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {data?.health.monthlyExpenseAverage ? formatCurrency(data.health.monthlyExpenseAverage) : '--'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Average per month</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Months Covered</CardTitle>
+                  <Wallet className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {data?.health.monthsCovered ? formatNumber(data.health.monthsCovered, 1) : '--'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Target: {data?.health.targetMonths || 6} months
                   </p>
-                </div>
-                <Link
-                  href="/cash/accounts"
-                  className="text-sm text-primary hover:underline flex items-center gap-1"
-                >
-                  Manage Accounts
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          {/* Key Metrics */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Cash</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {data?.health.totalCash ? formatCurrency(data.health.totalCash) : '--'}
-                </div>
-                <p className="text-xs text-muted-foreground">Across all accounts</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Monthly Expenses</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {data?.health.monthlyExpenseAverage ? formatCurrency(data.health.monthlyExpenseAverage) : '--'}
-                </div>
-                <p className="text-xs text-muted-foreground">Average per month</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Months Covered</CardTitle>
-                <Wallet className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {data?.health.monthsCovered ? formatNumber(data.health.monthsCovered, 1) : '--'}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Target: {data?.health.targetMonths || 6} months
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Status</CardTitle>
-                <AlertCircle className={`h-4 w-4 ${getStatusColor(data?.health.status || '')}`} />
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold capitalize ${getStatusColor(data?.health.status || '')}`}>
-                  {data?.health.status || '--'}
-                </div>
-                <p className="text-xs text-muted-foreground">Cash reserve health</p>
-              </CardContent>
-            </Card>
-          </div>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Status</CardTitle>
+                  <AlertCircle className={`h-4 w-4 ${getStatusColor(data?.health.status || '')}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold capitalize ${getStatusColor(data?.health.status || '')}`}>
+                    {data?.health.status || '--'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Cash reserve health</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Income Metrics from Pay Stubs */}
           {data?.income && data.income.paycheckCount > 0 && (

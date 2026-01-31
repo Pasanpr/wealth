@@ -39,6 +39,11 @@ const navGroups: NavGroup[] = [
         href: '/',
         icon: LayoutDashboard,
       },
+      {
+        title: 'Import',
+        href: '/import',
+        icon: Upload,
+      },
     ],
   },
   {
@@ -85,11 +90,6 @@ const navGroups: NavGroup[] = [
           { title: 'Returns', href: '/portfolio/returns' },
           { title: 'RSU Advisor', href: '/portfolio/rsu-advisor' },
         ],
-      },
-      {
-        title: 'Import',
-        href: '/import',
-        icon: Upload,
       },
     ],
   },

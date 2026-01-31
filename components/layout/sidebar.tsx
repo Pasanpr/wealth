@@ -68,11 +68,6 @@ const navGroups: NavGroup[] = [
         title: 'Spending',
         href: '/cashflow',
         icon: CreditCard,
-        children: [
-          { title: 'Monthly Grid', href: '/cashflow' },
-          { title: 'Manage Cards', href: '/cashflow/cards' },
-          { title: 'Trends', href: '/cashflow/trends' },
-        ],
       },
     ],
   },

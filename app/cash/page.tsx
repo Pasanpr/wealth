@@ -195,7 +195,7 @@ export default function CashDashboard() {
                   </p>
                 </div>
                 <Link
-                  href="/cash/balances"
+                  href="/cash/accounts"
                   className="text-sm text-primary hover:underline flex items-center gap-1"
                 >
                   Manage Accounts
@@ -411,7 +411,7 @@ export default function CashDashboard() {
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Cash Accounts</CardTitle>
                     <Link
-                      href="/cash/balances"
+                      href="/cash/accounts"
                       className="text-sm text-primary hover:underline flex items-center gap-1"
                     >
                       Manage
@@ -422,7 +422,7 @@ export default function CashDashboard() {
                     {accountBalances.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
                         No cash balances recorded yet.{' '}
-                        <Link href="/cash/balances" className="text-primary hover:underline">
+                        <Link href="/cash/accounts" className="text-primary hover:underline">
                           Add balances
                         </Link>
                       </div>
@@ -479,11 +479,11 @@ export default function CashDashboard() {
                         <span className="text-sm">RSU Vesting Schedule</span>
                       </Link>
                       <Link
-                        href="/cash/balances"
+                        href="/cash/accounts"
                         className="flex items-center rounded-md border p-3 hover:bg-accent"
                       >
                         <Wallet className="mr-3 h-4 w-4" />
-                        <span className="text-sm">Cash Balances</span>
+                        <span className="text-sm">Cash Accounts</span>
                       </Link>
                       <Link
                         href="/cashflow"

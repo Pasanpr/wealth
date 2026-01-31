@@ -50,7 +50,7 @@ const navGroups: NavGroup[] = [
         icon: Wallet,
         children: [
           { title: 'Dashboard', href: '/cash' },
-          { title: 'Cash Balances', href: '/cash/balances' },
+          { title: 'Accounts', href: '/cash/accounts' },
           { title: 'RSU Vesting', href: '/cash/rsu' },
         ],
       },

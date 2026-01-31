@@ -19,6 +19,7 @@ import { formatCurrency, formatNumber } from '@/lib/utils/format'
 import { CashAccount } from '@/lib/types'
 import { AlertCircle, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+import { LearnMore, TermTooltip } from '@/components/ui'
 
 interface CashHealthData {
   health: {
@@ -194,10 +195,28 @@ export default function CashHealthPage() {
             </Card>
           </div>
 
+          {/* Educational section */}
+          <LearnMore title="Why keep cash reserves?" className="mb-6">
+            <p className="mb-2">
+              <strong><TermTooltip term="emergency-fund">Cash reserves</TermTooltip></strong> (also called an emergency fund)
+              provide a financial safety net for unexpected expenses or income loss.
+            </p>
+            <ul className="list-disc list-inside space-y-1">
+              <li><strong>3 months:</strong> Minimum recommended for stable income with job security</li>
+              <li><strong>6 months:</strong> Standard recommendation for most people</li>
+              <li><strong>12 months:</strong> Better for self-employed or variable income</li>
+            </ul>
+            <p className="mt-2">
+              Keep reserves in easily accessible accounts (checking, savings) - not locked in investments.
+            </p>
+          </LearnMore>
+
           {/* Coverage Bars */}
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle>Expense Coverage</CardTitle>
+              <CardTitle>
+                <TermTooltip term="months-covered">Expense Coverage</TermTooltip>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {healthData?.coverage && healthData.coverage.length > 0 ? (

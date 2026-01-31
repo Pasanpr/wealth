@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils/cn'
 
 interface PageContainerProps {
   children: React.ReactNode
-  title: string
+  title: React.ReactNode
   description?: string
   actions?: React.ReactNode
   className?: string

@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Sidebar } from '@/components/layout'
 import { ThemeProvider } from '@/components/theme/theme-provider'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { DisplayModeProvider } from '@/lib/context/display-mode'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -39,10 +41,14 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <ThemeProvider>
-          <div className="flex h-screen bg-background">
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto">{children}</main>
-          </div>
+          <DisplayModeProvider>
+            <TooltipProvider>
+              <div className="flex h-screen bg-background">
+                <Sidebar />
+                <main className="flex-1 overflow-y-auto">{children}</main>
+              </div>
+            </TooltipProvider>
+          </DisplayModeProvider>
         </ThemeProvider>
       </body>
     </html>

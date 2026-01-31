@@ -1,0 +1,4 @@
+date,account_name,symbol,value,shares,cost_basis
+2024-01-31,My 401k,VTSAX,50000.00,250,45000.00
+2024-01-31,My 401k,VBTLX,20000.00,200,19000.00
+2024-01-31,Brokerage Account,VTSAX,30000.00,150,27000.00

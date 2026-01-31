@@ -95,6 +95,7 @@ const navItems: NavItem[] = [
       { title: 'Fixed Expenses', href: '/settings/fixed-expenses' },
       { title: 'Tax Profile', href: '/settings/tax-profile' },
       { title: 'Data Management', href: '/settings/data-management' },
+      { title: 'Glossary', href: '/settings/glossary' },
     ],
   },
 ]

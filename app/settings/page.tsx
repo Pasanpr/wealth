@@ -11,8 +11,9 @@ import {
   Input,
   Label,
 } from '@/components/ui'
-import { Save, Settings2, AlertTriangle, FileText } from 'lucide-react'
+import { Save, Settings2, AlertTriangle, FileText, Eye, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { useDisplayMode } from '@/lib/context/display-mode'
 
 interface Settings {
   rebalance_threshold: string
@@ -27,6 +28,7 @@ export default function SettingsPage() {
     cash_reserve_months: '6',
   })
   const [saving, setSaving] = useState(false)
+  const { mode, setMode } = useDisplayMode()
 
   useEffect(() => {
     fetch('/api/settings')
@@ -116,6 +118,39 @@ export default function SettingsPage() {
               />
               <p className="text-xs text-muted-foreground">
                 Target number of months of expenses to keep in cash reserves
+              </p>
+            </div>
+
+            <div className="grid gap-2 pt-4 border-t">
+              <Label>Display Mode</Label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMode('simple')}
+                  className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${
+                    mode === 'simple'
+                      ? 'bg-primary/10 border-primary text-primary'
+                      : 'border-border hover:bg-muted'
+                  }`}
+                >
+                  <Eye className="h-4 w-4" />
+                  <span className="text-sm font-medium">Simple</span>
+                </button>
+                <button
+                  onClick={() => setMode('advanced')}
+                  className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${
+                    mode === 'advanced'
+                      ? 'bg-primary/10 border-primary text-primary'
+                      : 'border-border hover:bg-muted'
+                  }`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span className="text-sm font-medium">Advanced</span>
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {mode === 'simple'
+                  ? 'Shows essential information only - great for beginners'
+                  : 'Shows all details and technical metrics - for experienced users'}
               </p>
             </div>
           </CardContent>

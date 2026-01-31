@@ -14,7 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui'
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
+import { Upload, FileText, CheckCircle, AlertCircle, Download, HelpCircle, ArrowRight } from 'lucide-react'
+import { LearnMore, QuickTip } from '@/components/ui'
+import Link from 'next/link'
 
 const importTypes = [
   {
@@ -24,6 +26,7 @@ const importTypes = [
     format: 'Sections like "Sheet 1: 2024" with monthly columns (January 2024, February 2024, etc.)',
     example: 'Rows: Sapphire Balance, Apple Card, Checking, Savings with monthly values',
     isSpecial: true,
+    helpText: 'Best for importing historical spending data',
   },
   {
     value: 'income',
@@ -31,6 +34,8 @@ const importTypes = [
     description: 'Import salary, RSU vesting, bonuses',
     format: 'date,income_type,amount,description,is_recurring',
     example: '2024-01-15,salary,8500.00,Monthly salary,true',
+    template: '/templates/income-template.csv',
+    helpText: 'Track your income sources over time',
   },
   {
     value: 'holdings',
@@ -38,6 +43,8 @@ const importTypes = [
     description: 'Import holdings with values',
     format: 'date,account_name,symbol,value,shares,cost_basis',
     example: '2024-01-31,Fidelity Brokerage,VTSAX,50000.00,250,45000.00',
+    template: '/templates/holdings-template.csv',
+    helpText: 'Record your investment positions',
   },
   {
     value: 'securities',
@@ -45,6 +52,8 @@ const importTypes = [
     description: 'Import funds, ETFs, stocks',
     format: 'symbol,name,asset_class',
     example: 'VTSAX,Vanguard Total Stock Market Index,US Total Market',
+    template: '/templates/securities-template.csv',
+    helpText: 'Define investments before importing holdings',
   },
   {
     value: 'cash_flows',
@@ -52,6 +61,7 @@ const importTypes = [
     description: 'Import contributions and withdrawals',
     format: 'date,account_name,amount,flow_type,description',
     example: '2024-01-15,Fidelity Brokerage,1000.00,contribution,Monthly contribution',
+    helpText: 'Track money moving in and out of accounts',
   },
   {
     value: 'tax_profile',
@@ -59,6 +69,7 @@ const importTypes = [
     description: 'Import income and tax data',
     format: 'year,gross_income,federal_tax,state_tax',
     example: '2023,250000,45000,15000',
+    helpText: 'Set up tax info for RSU calculations',
   },
 ]
 
@@ -152,6 +163,22 @@ export default function ImportPage() {
       title="Import Data"
       description="Import data from CSV files"
     >
+      {/* Quick tip for other import options */}
+      <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
+        <div className="flex items-start gap-3">
+          <HelpCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium mb-1">Other import options</p>
+            <p className="text-muted-foreground">
+              Looking for specific imports?{' '}
+              <Link href="/portfolio/import" className="text-primary hover:underline">Vanguard CSV</Link> |{' '}
+              <Link href="/pay-statements/import" className="text-primary hover:underline">Pay statements</Link> |{' '}
+              <Link href="/cash/rsu/import" className="text-primary hover:underline">RSU vesting</Link>
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -290,6 +317,21 @@ export default function ImportPage() {
                   </p>
                 </div>
 
+                {/* Template download */}
+                {'template' in selectedImportType && selectedImportType.template && (
+                  <a
+                    href={selectedImportType.template}
+                    download
+                    className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
+                  >
+                    <Download className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm font-medium">Download Template</p>
+                      <p className="text-xs text-muted-foreground">Pre-formatted CSV file to get you started</p>
+                    </div>
+                  </a>
+                )}
+
                 <div>
                   <h5 className="text-sm font-medium mb-2">Required Columns:</h5>
                   <code className="text-xs bg-muted p-2 rounded block overflow-x-auto">
@@ -311,9 +353,11 @@ export default function ImportPage() {
                 )}
 
                 {selectedType === 'holdings' && (
-                  <div className="text-sm text-muted-foreground">
-                    <strong>account_name</strong> and <strong>symbol</strong> must match existing accounts and securities
-                  </div>
+                  <QuickTip>
+                    <strong>Important:</strong> Accounts and securities must exist before importing holdings.{' '}
+                    <Link href="/portfolio/accounts" className="text-primary hover:underline">Create accounts</Link> and{' '}
+                    <Link href="/settings/securities" className="text-primary hover:underline">add securities</Link> first.
+                  </QuickTip>
                 )}
 
                 {selectedType === 'cash_flows' && (
@@ -323,23 +367,23 @@ export default function ImportPage() {
                 )}
 
                 {selectedType === 'monthly_balances' && (
-                  <div className="text-sm text-muted-foreground space-y-2">
-                    <p>This import extracts both credit cards and cash accounts in one pass.</p>
-                    <p className="font-medium mt-3">Credit card rows detected by:</p>
-                    <ul className="list-disc list-inside space-y-1">
+                  <LearnMore title="How this import works" defaultOpen>
+                    <p className="mb-2">This import extracts both credit cards and cash accounts in one pass.</p>
+                    <p className="font-medium">Credit card rows detected by:</p>
+                    <ul className="list-disc list-inside space-y-1 mb-2">
                       <li>Rows containing &quot;Balance&quot; (e.g., Sapphire Balance)</li>
                       <li>Rows containing &quot;Card&quot; (e.g., Apple Card)</li>
                       <li>Rows containing card brands (Visa, Mastercard, Amex, etc.)</li>
                     </ul>
-                    <p className="font-medium mt-3">Cash account rows detected by:</p>
-                    <ul className="list-disc list-inside space-y-1">
+                    <p className="font-medium">Cash account rows detected by:</p>
+                    <ul className="list-disc list-inside space-y-1 mb-2">
                       <li>Rows containing &quot;Checking&quot;</li>
                       <li>Rows containing &quot;Savings&quot;</li>
                     </ul>
-                    <p className="mt-3">Rows with &quot;Desired&quot;, &quot;Available&quot;, &quot;Payment&quot;, or &quot;Transfer&quot; are excluded.</p>
-                    <p className="mt-2">The importer looks for sections titled &quot;Sheet 1: YYYY&quot; with monthly columns (January 2024, February 2024, etc.).</p>
-                    <p>Cards and accounts will be created automatically if they don&apos;t exist.</p>
-                  </div>
+                    <p className="text-muted-foreground/80 italic">
+                      Cards and accounts will be created automatically if they don&apos;t exist.
+                    </p>
+                  </LearnMore>
                 )}
               </div>
             ) : (

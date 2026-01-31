@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { PageContainer } from '@/components/layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
-import { Wallet, CreditCard, PieChart, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle, Button, Progress } from '@/components/ui'
+import { Wallet, CreditCard, PieChart, TrendingUp, AlertCircle, CheckCircle, Circle, X, Sparkles, ArrowRight } from 'lucide-react'
 import { formatCurrency, formatNumber } from '@/lib/utils/format'
 import Link from 'next/link'
+import { OnboardingProgress } from './api/onboarding/route'
 
 interface DashboardData {
   cash: {
@@ -31,6 +32,26 @@ interface SummaryCardProps {
   icon: React.ComponentType<{ className?: string }>
   href: string
   status?: 'healthy' | 'warning' | 'critical' | null
+}
+
+function OnboardingStep({ done, href, label }: { done: boolean; href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-2 p-2 rounded-md transition-colors ${
+        done
+          ? 'text-green-600 dark:text-green-400'
+          : 'text-muted-foreground hover:bg-muted/50'
+      }`}
+    >
+      {done ? (
+        <CheckCircle className="h-4 w-4 flex-shrink-0" />
+      ) : (
+        <Circle className="h-4 w-4 flex-shrink-0" />
+      )}
+      <span className={done ? 'line-through opacity-70' : ''}>{label}</span>
+    </Link>
+  )
 }
 
 function SummaryCard({ title, value, description, icon: Icon, href, status }: SummaryCardProps) {
@@ -88,6 +109,7 @@ function SummaryCard({ title, value, description, icon: Icon, href, status }: Su
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [onboarding, setOnboarding] = useState<OnboardingProgress | null>(null)
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -95,7 +117,23 @@ export default function Dashboard() {
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false))
+
+    fetch('/api/onboarding')
+      .then(res => res.json())
+      .then(setOnboarding)
+      .catch(console.error)
   }, [])
+
+  const dismissOnboarding = async () => {
+    await fetch('/api/onboarding', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dismissed: true }),
+    })
+    setOnboarding(prev => prev ? { ...prev, dismissed: true } : null)
+  }
+
+  const showOnboarding = onboarding && !onboarding.dismissed && onboarding.percentComplete < 100
 
   return (
     <PageContainer
@@ -173,43 +211,101 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 dark:from-blue-500/10 dark:to-cyan-500/10 border-blue-500/40 dark:border-blue-500/30">
-          <CardHeader>
-            <CardTitle className="text-blue-700 dark:text-foreground">Getting Started</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <p>Welcome to Wealth! Here&apos;s how to get started:</p>
-              <ol className="list-decimal list-inside space-y-2">
-                <li>
-                  <Link href="/settings/asset-classes" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
-                    Set up asset classes
-                  </Link> and target allocations
-                </li>
-                <li>
-                  <Link href="/settings/securities" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
-                    Add securities
-                  </Link> you hold (funds, ETFs)
-                </li>
-                <li>
-                  <Link href="/portfolio/accounts" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
-                    Create accounts
-                  </Link> (brokerage, IRA, 401k)
-                </li>
-                <li>
-                  <Link href="/cashflow/cards" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
-                    Add credit cards
-                  </Link> to track spending
-                </li>
-                <li>
-                  <Link href="/import" className="text-blue-600 dark:text-primary hover:text-blue-500 dark:hover:text-primary/80 hover:underline font-medium">
-                    Import historical data
-                  </Link> via CSV
-                </li>
-              </ol>
-            </div>
-          </CardContent>
-        </Card>
+        {showOnboarding ? (
+          <Card className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 dark:from-blue-500/10 dark:to-cyan-500/10 border-blue-500/40 dark:border-blue-500/30">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-blue-700 dark:text-foreground">Getting Started</CardTitle>
+                <button
+                  onClick={dismissOnboarding}
+                  className="text-muted-foreground hover:text-foreground"
+                  title="Dismiss"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Setup Progress</span>
+                  <span className="font-medium">{onboarding.completedSteps} of {onboarding.totalSteps}</span>
+                </div>
+                <Progress value={onboarding.percentComplete} className="h-2" />
+              </div>
+              <div className="space-y-2 text-sm">
+                <OnboardingStep
+                  done={onboarding.asset_classes_done}
+                  href="/settings/asset-classes"
+                  label="Set up asset classes"
+                />
+                <OnboardingStep
+                  done={onboarding.securities_done}
+                  href="/settings/securities"
+                  label="Add securities"
+                />
+                <OnboardingStep
+                  done={onboarding.accounts_done}
+                  href="/portfolio/accounts"
+                  label="Create accounts"
+                />
+                <OnboardingStep
+                  done={onboarding.credit_cards_done}
+                  href="/cashflow/cards"
+                  label="Add credit cards"
+                />
+                <OnboardingStep
+                  done={onboarding.import_done}
+                  href="/import"
+                  label="Import data"
+                />
+              </div>
+              <Button asChild className="w-full mt-4" size="sm">
+                <Link href="/onboarding">
+                  Continue Setup
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : onboarding && onboarding.percentComplete === 100 && !onboarding.dismissed ? (
+          <Card className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 dark:from-green-500/10 dark:to-emerald-500/10 border-green-500/40 dark:border-green-500/30">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-green-700 dark:text-foreground flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  Setup Complete
+                </CardTitle>
+                <button
+                  onClick={dismissOnboarding}
+                  className="text-muted-foreground hover:text-foreground"
+                  title="Dismiss"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Great job! Your financial dashboard is all set up. You can always add more data or adjust settings later.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 dark:from-blue-500/10 dark:to-cyan-500/10 border-blue-500/40 dark:border-blue-500/30">
+            <CardHeader>
+              <CardTitle className="text-blue-700 dark:text-foreground">Quick Links</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 text-sm">
+                <Link href="/settings/asset-classes" className="text-primary hover:underline">Asset Classes</Link>
+                <Link href="/settings/securities" className="text-primary hover:underline">Securities</Link>
+                <Link href="/portfolio/accounts" className="text-primary hover:underline">Accounts</Link>
+                <Link href="/settings/glossary" className="text-primary hover:underline">Financial Glossary</Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Status Alerts */}

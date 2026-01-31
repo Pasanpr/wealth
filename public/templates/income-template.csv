@@ -1,0 +1,6 @@
+date,income_type,amount,description,is_recurring
+2024-01-15,salary,8500.00,Monthly salary,true
+2024-01-20,rsu_vesting,5000.00,Quarterly RSU vest,false
+2024-02-15,salary,8500.00,Monthly salary,true
+2024-03-15,salary,8500.00,Monthly salary,true
+2024-03-31,bonus,10000.00,Annual bonus,false

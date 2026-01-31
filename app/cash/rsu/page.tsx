@@ -308,7 +308,7 @@ export default function RsuPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Projected Income</CardTitle>
+            <CardTitle className="text-sm font-medium">Annual Projected Income</CardTitle>
             {livePrice && typeof livePrice.change === 'number' && livePrice.change >= 0 ? (
               <TrendingUp className="h-4 w-4 text-green-600" />
             ) : (
@@ -317,9 +317,28 @@ export default function RsuPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {metrics?.projectedIncome ? formatCurrency(metrics.projectedIncome) : '--'}
+              {metrics?.annualProjectedGross ? formatCurrency(metrics.annualProjectedGross) : '--'}
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs text-muted-foreground">gross projection</p>
+
+            {metrics?.annualProjectedNet !== null && metrics?.annualProjectedNet !== undefined ? (
+              <div className="mt-2">
+                <div className="text-lg font-semibold text-green-600">
+                  {formatCurrency(metrics.annualProjectedNet)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  after tax ({metrics.taxRateYear} rate: {formatPercent(metrics.taxRateUsed || 0)})
+                </p>
+              </div>
+            ) : (
+              <div className="mt-2">
+                <Link href="/settings" className="text-xs text-blue-600 hover:underline">
+                  Add tax profile for net projection
+                </Link>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 mt-3 pt-2 border-t">
               <div className="flex items-center gap-1">
                 <span className="text-xs font-medium">INTU:</span>
                 {priceLoading ? (
@@ -350,7 +369,7 @@ export default function RsuPage() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {metrics ? formatShares(metrics.pendingShares) : '--'} pending shares
+              {metrics ? formatShares(metrics.remainingYearShares) : '--'} shares remaining this year
             </p>
           </CardContent>
         </Card>

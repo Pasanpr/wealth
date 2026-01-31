@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db'
-import { RsuVesting, RsuMetrics } from '@/lib/types'
+import { RsuVesting, RsuMetrics, TaxProfile } from '@/lib/types'
 
 /**
  * Get all RSU records
@@ -75,6 +75,35 @@ export function getRsuMetrics(currentStockPrice?: number): RsuMetrics {
     ? pendingShares * currentStockPrice
     : 0
 
+  // Remaining vests for current year (unvested shares with vest date this year)
+  const remainingThisYear = records.filter(r => {
+    const vestYear = new Date(r.vest_date).getFullYear()
+    return !r.is_vested && vestYear === currentYear
+  })
+
+  const remainingYearShares = remainingThisYear.reduce(
+    (sum, r) => sum + r.shares,
+    0
+  )
+
+  // Remaining projected value for current year (using current stock price)
+  const remainingYearGross = currentStockPrice
+    ? remainingYearShares * currentStockPrice
+    : 0
+
+  // Annual gross = YTD actual + remaining projected
+  const annualProjectedGross = ytdVestValue + remainingYearGross
+
+  // Get most recent tax profile for net calculation
+  const taxProfile = db.prepare(
+    'SELECT * FROM tax_profile ORDER BY year DESC LIMIT 1'
+  ).get() as TaxProfile | undefined
+
+  // Calculate net if tax profile exists
+  const annualProjectedNet = taxProfile
+    ? annualProjectedGross * (1 - taxProfile.effective_rate)
+    : null
+
   return {
     ytdVestValue,
     ytdTaxesWithheld,
@@ -84,6 +113,12 @@ export function getRsuMetrics(currentStockPrice?: number): RsuMetrics {
     projectedIncome,
     pendingShares,
     vestedShares,
+    annualProjectedGross,
+    annualProjectedNet,
+    remainingYearGross,
+    remainingYearShares,
+    taxRateUsed: taxProfile?.effective_rate ?? null,
+    taxRateYear: taxProfile?.year ?? null,
   }
 }
 

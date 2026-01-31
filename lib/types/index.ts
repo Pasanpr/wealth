@@ -123,9 +123,16 @@ export interface RsuMetrics {
   effectiveTaxRate: number // ytdTaxesWithheld / ytdVestValue
   totalReinvested: number // Total reinvested this year
   reinvestmentRate: number // reinvested / net proceeds
-  projectedIncome: number // Future vests × current price
+  projectedIncome: number // Future vests × current price (all pending)
   pendingShares: number // Unvested shares
   vestedShares: number // Total vested shares
+  // Annual projection fields
+  annualProjectedGross: number // YTD actual + remaining current year @ current price
+  annualProjectedNet: number | null // gross × (1 - tax rate), null if no tax profile
+  remainingYearGross: number // Projected value of unvested shares for current year
+  remainingYearShares: number // Shares still to vest this year
+  taxRateUsed: number | null // Effective rate used for net calculation
+  taxRateYear: number | null // Year of tax profile used
 }
 
 // RSU W-2 data for tax reconciliation (legacy - use W2Form instead)

@@ -61,7 +61,6 @@ const navItems: NavItem[] = [
     icon: CreditCard,
     children: [
       { title: 'Monthly Grid', href: '/cashflow' },
-      { title: 'Manual Entry', href: '/cashflow/entry' },
       { title: 'Manage Cards', href: '/cashflow/cards' },
       { title: 'Trends', href: '/cashflow/trends' },
     ],

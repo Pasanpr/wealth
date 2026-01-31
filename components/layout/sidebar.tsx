@@ -60,7 +60,6 @@ const navGroups: NavGroup[] = [
         icon: FileText,
         children: [
           { title: 'Dashboard', href: '/pay-statements' },
-          { title: 'Import', href: '/pay-statements/import' },
           { title: 'History', href: '/pay-statements/history' },
         ],
       },

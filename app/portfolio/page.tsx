@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { PageContainer } from '@/components/layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, CompactMetrics, QuickActions } from '@/components/ui'
 import { formatCurrency, formatPercent } from '@/lib/utils/format'
 import { PieChart, Briefcase, TrendingUp, BarChart3, Upload } from 'lucide-react'
 import Link from 'next/link'
+import { useDisplayMode } from '@/lib/context/display-mode'
 import {
   PieChart as RechartsPie,
   Pie,
@@ -23,6 +24,7 @@ interface AllocationData {
     targetAllocation: number
   }[]
   totalValue: number
+  needsRebalancing?: boolean
   accountBreakdown: {
     accountId: number
     accountName: string
@@ -33,9 +35,17 @@ interface AllocationData {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#ff7300']
 
+const QUICK_ACTIONS = [
+  { label: 'Manage Accounts', href: '/portfolio/accounts', icon: Briefcase, gradient: 'blue' as const },
+  { label: 'Update Holdings', href: '/portfolio/holdings', icon: PieChart, gradient: 'purple' as const },
+  { label: 'Allocation & Rebalancing', href: '/portfolio/allocation', icon: BarChart3, gradient: 'emerald' as const },
+  { label: 'Return Analysis', href: '/portfolio/returns', icon: TrendingUp, gradient: 'orange' as const },
+]
+
 export default function PortfolioOverview() {
   const [data, setData] = useState<AllocationData | null>(null)
   const [loading, setLoading] = useState(true)
+  const { isAdvanced } = useDisplayMode()
 
   useEffect(() => {
     fetch('/api/portfolio/allocation')
@@ -52,6 +62,9 @@ export default function PortfolioOverview() {
       value: a.currentValue,
     })) || []
 
+  const assetClassCount = data?.allocations.filter(a => a.currentValue > 0).length || 0
+  const accountCount = data?.accountBreakdown?.length || 0
+
   return (
     <PageContainer
       title="Portfolio Overview"
@@ -61,20 +74,45 @@ export default function PortfolioOverview() {
         <div className="text-muted-foreground">Loading...</div>
       ) : (
         <>
-          {/* Net Worth Card */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Net Worth</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">
-                {data?.totalValue ? formatCurrency(data.totalValue) : '--'}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Total portfolio value across all accounts
-              </p>
-            </CardContent>
-          </Card>
+          {/* L1: Hero Banner - Simple Mode */}
+          {!isAdvanced && data && (
+            <CompactMetrics
+              className="mb-6"
+              metrics={[
+                {
+                  label: 'net worth',
+                  value: formatCurrency(data.totalValue),
+                },
+                {
+                  label: 'accounts',
+                  value: accountCount.toString(),
+                },
+                {
+                  label: 'asset classes',
+                  value: assetClassCount.toString(),
+                },
+              ]}
+              status={data.needsRebalancing ? 'warning' : 'healthy'}
+              statusLabel={data.needsRebalancing ? 'Rebalance needed' : 'Balanced'}
+            />
+          )}
+
+          {/* Net Worth Card - Advanced Mode */}
+          {isAdvanced && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Net Worth</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-4xl font-bold">
+                  {data?.totalValue ? formatCurrency(data.totalValue) : '--'}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Total portfolio value across all accounts
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2 mb-6">
             {/* Asset Allocation Chart */}
@@ -115,49 +153,20 @@ export default function PortfolioOverview() {
               </CardContent>
             </Card>
 
-            {/* Quick Links */}
+            {/* Quick Actions */}
             <Card>
               <CardHeader>
-                <CardTitle>Quick Links</CardTitle>
+                <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-2">
-                  <Link
-                    href="/portfolio/accounts"
-                    className="flex items-center rounded-md border p-3 hover:bg-accent"
-                  >
-                    <Briefcase className="mr-3 h-4 w-4" />
-                    <span className="text-sm">Manage Accounts</span>
-                  </Link>
-                  <Link
-                    href="/portfolio/holdings"
-                    className="flex items-center rounded-md border p-3 hover:bg-accent"
-                  >
-                    <PieChart className="mr-3 h-4 w-4" />
-                    <span className="text-sm">Update Holdings</span>
-                  </Link>
-                  <Link
-                    href="/portfolio/allocation"
-                    className="flex items-center rounded-md border p-3 hover:bg-accent"
-                  >
-                    <BarChart3 className="mr-3 h-4 w-4" />
-                    <span className="text-sm">Allocation & Rebalancing</span>
-                  </Link>
-                  <Link
-                    href="/portfolio/returns"
-                    className="flex items-center rounded-md border p-3 hover:bg-accent"
-                  >
-                    <TrendingUp className="mr-3 h-4 w-4" />
-                    <span className="text-sm">Return Analysis</span>
-                  </Link>
-                  <Link
-                    href="/portfolio/import"
-                    className="flex items-center rounded-md border p-3 hover:bg-accent"
-                  >
-                    <Upload className="mr-3 h-4 w-4" />
-                    <span className="text-sm">Import Vanguard CSV</span>
-                  </Link>
-                </div>
+                <QuickActions actions={QUICK_ACTIONS} />
+                <Link
+                  href="/import"
+                  className="flex items-center rounded-md border p-3 mt-2 hover:bg-accent"
+                >
+                  <Upload className="mr-3 h-4 w-4" />
+                  <span className="text-sm">Import Portfolio Data</span>
+                </Link>
               </CardContent>
             </Card>
           </div>

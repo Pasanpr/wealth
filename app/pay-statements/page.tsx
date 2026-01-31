@@ -176,7 +176,7 @@ export default function PayStatementsPage() {
             </Button>
           )}
           <Button asChild>
-            <Link href="/pay-statements/import">
+            <Link href="/import">
               <Upload className="mr-2 h-4 w-4" />
               Import PDFs
             </Link>
@@ -214,7 +214,7 @@ export default function PayStatementsPage() {
                 Import your ADP pay stubs to start tracking earnings
               </p>
               <Button asChild>
-                <Link href="/pay-statements/import">
+                <Link href="/import">
                   <Upload className="mr-2 h-4 w-4" />
                   Import Pay Stubs
                 </Link>

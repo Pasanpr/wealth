@@ -64,7 +64,7 @@ export default function PayStatementsHistoryPage() {
       description="View all imported pay statements"
       actions={
         <Button asChild>
-          <Link href="/pay-statements/import">
+          <Link href="/import">
             <Upload className="mr-2 h-4 w-4" />
             Import PDFs
           </Link>

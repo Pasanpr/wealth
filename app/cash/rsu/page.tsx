@@ -263,7 +263,7 @@ export default function RsuPage() {
       description="Track your RSU vesting, sales, and tax impact"
       actions={
         <div className="flex gap-2">
-          <Link href="/cash/rsu/import">
+          <Link href="/import">
             <Button variant="outline">
               <Upload className="mr-2 h-4 w-4" />
               Import
